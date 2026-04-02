@@ -1,0 +1,44 @@
+name: LangAutoSwitcher
+options:
+  bundleIdPrefix: com.dklaturov
+  deploymentTarget:
+    macOS: "14.0"
+  minimumXcodeGenVersion: "2.30"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  LangAutoSwitcher:
+    type: application
+    platform: macOS
+    sources:
+      - path: LangAutoSwitcher/Sources
+    resources:
+      - path: LangAutoSwitcher/Resources
+    info:
+      path: LangAutoSwitcher/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: LangAutoSwitcher
+        LSBackgroundOnly: true
+        LSUIElement: true
+        InputMethodConnectionName: LangAutoSwitcher_Connection
+        InputMethodServerControllerClass: InputController
+        tsInputMethodCharacterRepertoireKey:
+          - Latn
+          - Cyrl
+        tsInputMethodIconFileKey: icon.tiff
+        TISIntendedLanguage: en
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dklaturov.inputmethod.LangAutoSwitcher
+        # Input methods must NOT be sandboxed
+        ENABLE_APP_SANDBOX: false
+        # No main storyboard/xib — we run headless
+        INFOPLIST_KEY_NSMainStoryboardFile: ""
+        # Link InputMethodKit
+        OTHER_LDFLAGS: ["-framework", "InputMethodKit"]
+        # Disable SwiftUI automatic @main detection since we use main.swift
+        SWIFT_OBJC_BRIDGING_HEADER: ""

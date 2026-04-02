@@ -1,0 +1,9 @@
+build/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/
+.DS_Store
+*.swp
+*.moved-aside
+*.xcuserstate
+proof_of_concept.py
