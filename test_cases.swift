@@ -28,7 +28,7 @@ struct PhoneticMapper {
         "p": "п", "r": "р", "s": "с", "t": "т",
         "u": "у", "v": "ж", "w": "в", "x": "ь", "y": "ъ",
         "z": "з", "q": "я",
-        "]": "щ", "[": "ш", ";": "ж", "'": "ь", "`": "ч",
+        "]": "щ", "[": "ш", ";": "ж", "'": "ь", "`": "ч", "\\": "ю",
         "A": "А", "B": "Б", "C": "Ц", "D": "Д", "E": "Е",
         "F": "Ф", "G": "Г", "H": "Х", "I": "И", "J": "Й",
         "K": "К", "L": "Л", "M": "М", "N": "Н", "O": "О",
@@ -122,6 +122,7 @@ test("] → щ", PhoneticMapper.toCyrillic("]") == "щ")
 test("[ → ш", PhoneticMapper.toCyrillic("[") == "ш")
 test("; → ж", PhoneticMapper.toCyrillic(";") == "ж")
 test("` → ч", PhoneticMapper.toCyrillic("`") == "ч")
+test("\\ → ю", PhoneticMapper.toCyrillic("\\") == "ю")
 
 // Digraphs
 test("sh → ш", PhoneticMapper.toCyrillic("sh") == "ш")
@@ -150,6 +151,7 @@ let wordTests: [(String, String, String)] = [
     ("zdrawej", "здравей", "hello"),
     ("mashina", "машина", "machine"),
     ("uchilishte", "училище", "school (with digraph)"),
+    ("prewkl\\`wam", "превключвам", "to switch (with \\ → ю)"),
 ]
 
 print("\n📋 WORD MAPPING TESTS")
@@ -254,10 +256,19 @@ let scenarios: [Scenario] = [
 
     // EN streak should not break on false BG match
     Scenario(
-        name: "EN streak protection: when there is a pdf",
+        name: "EN streak protection: when there is a puf (пуф false match)",
         words: ["when", "there", "is", "a", "puf"],
-        expectedLangs: ["EN", "EN", "EN", "EN", "EN"],  // puf→пуф is false BG match
+        expectedLangs: ["EN", "EN", "EN", "EN", "EN"],
         expectedOutputs: ["when", "there", "is", "a", "puf"]
+    ),
+
+    // In BG flow, "pdf"→"пдф" should NOT be spell-corrected to "пуф"
+    // The direct transliteration is correct — пдф not пуф
+    Scenario(
+        name: "BG flow: pdf → пдф (not spell-corrected to пуф)",
+        words: ["koj", "prawi", "pdf"],
+        expectedLangs: ["BG", "BG", "BG"],
+        expectedOutputs: ["кой", "прави", "пдф"]
     ),
 
     // BG with special chars

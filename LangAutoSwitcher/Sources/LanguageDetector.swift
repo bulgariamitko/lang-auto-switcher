@@ -175,44 +175,64 @@ final class LanguageDetector {
                 confidence = 1.0
             }
         } else {
-            // In NEITHER dictionary — check if spell correction finds a match
-            // in either dictionary BEFORE falling back to NLLanguageRecognizer
-            let enSpellCorrection = autoCorrector.correctEnglish(word, dictionary: enDictionary)
-            let bgSpellCorrection = autoCorrector.correctBulgarian(cyrillic, dictionary: bgDictionary)
+            // In NEITHER dictionary — respect the current flow first.
+            // Only try spell correction if it agrees with the flow.
+            // This prevents "pdf"→"пдф"→spell correct→"пуф" when in English flow.
 
-            if bgSpellCorrection != nil && enSpellCorrection == nil {
-                // Only BG has a correction → Bulgarian typo
+            if lastWordLanguage == .english && streakLen >= 2 {
+                // In English flow — try English spell correction only
+                let enSpellCorrection = autoCorrector.correctEnglish(word, dictionary: enDictionary)
+                if let corrected = enSpellCorrection {
+                    detected = .english
+                    output = corrected
+                    confidence = 0.8
+                } else {
+                    // No EN correction — keep as Latin (it's probably an acronym like "pdf")
+                    detected = .english
+                    output = word
+                    confidence = 0.5
+                }
+            } else if lastWordLanguage == .bulgarian && streakLen >= 2 {
+                // In Bulgarian flow — just transliterate directly.
+                // Don't spell-correct: "пдф" should stay "пдф", not become "пуф".
+                // The user typed exactly what they meant (acronym, foreign word, etc.)
                 detected = .bulgarian
-                output = bgSpellCorrection!
-                confidence = 0.8
-            } else if enSpellCorrection != nil && bgSpellCorrection == nil {
-                // Only EN has a correction → English typo
-                detected = .english
-                output = enSpellCorrection!
-                confidence = 0.8
-            } else if enSpellCorrection != nil && bgSpellCorrection != nil {
-                // Both have corrections → follow previous word flow
-                if lastWordLanguage == .bulgarian {
+                output = cyrillic
+                confidence = 0.5
+            } else {
+                // No clear flow — try both spell corrections
+                let enSpellCorrection = autoCorrector.correctEnglish(word, dictionary: enDictionary)
+                let bgSpellCorrection = autoCorrector.correctBulgarian(cyrillic, dictionary: bgDictionary)
+
+                if bgSpellCorrection != nil && enSpellCorrection == nil {
                     detected = .bulgarian
                     output = bgSpellCorrection!
-                    confidence = 0.7
-                } else if lastWordLanguage == .english {
+                    confidence = 0.8
+                } else if enSpellCorrection != nil && bgSpellCorrection == nil {
                     detected = .english
                     output = enSpellCorrection!
-                    confidence = 0.7
+                    confidence = 0.8
+                } else if enSpellCorrection != nil && bgSpellCorrection != nil {
+                    if lastWordLanguage == .bulgarian {
+                        detected = .bulgarian
+                        output = bgSpellCorrection!
+                        confidence = 0.7
+                    } else if lastWordLanguage == .english {
+                        detected = .english
+                        output = enSpellCorrection!
+                        confidence = 0.7
+                    } else {
+                        let result = resolveUnknown(word: word, cyrillic: cyrillic)
+                        detected = result.0
+                        output = result.1
+                        confidence = result.2
+                    }
                 } else {
-                    // No context — use NLLanguageRecognizer
                     let result = resolveUnknown(word: word, cyrillic: cyrillic)
                     detected = result.0
                     output = result.1
                     confidence = result.2
                 }
-            } else {
-                // No spell corrections either — use NLLanguageRecognizer + context
-                let result = resolveUnknown(word: word, cyrillic: cyrillic)
-                detected = result.0
-                output = result.1
-                confidence = result.2
             }
         }
 

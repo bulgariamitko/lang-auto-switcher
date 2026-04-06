@@ -25,9 +25,37 @@ class InputController: IMKInputController {
     /// We hold it and wait for the next word to decide its language.
     private var pendingWord: String? = nil
 
+    /// Whether the current app is a terminal — if so, pass all keys through directly.
+    private var isTerminalApp = false
+
+    /// Bundle IDs of known terminal/CLI apps where we should not intercept input.
+    private static let terminalBundleIDs: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "net.kovidgoyal.kitty",
+        "io.alacritty",
+        "com.github.wez.wezterm",
+        "dev.warp.Warp-Stable",
+        "dev.warp.Warp",
+        "co.zeit.hyper",
+        "com.qvacua.VimR",
+        "org.vim.MacVim",
+    ]
+
+    /// Bundle ID prefixes that indicate terminal-like apps.
+    private static let terminalPrefixes: [String] = [
+        "com.microsoft.VSCode",   // VS Code (has integrated terminal)
+        "com.jetbrains.",         // JetBrains IDEs (have integrated terminals)
+    ]
+
     // MARK: - IMKInputController overrides
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
+        // In terminal apps, pass everything through — don't intercept
+        if isTerminalApp {
+            return false
+        }
+
         guard let event = event, event.type == .keyDown else {
             return false
         }
@@ -81,7 +109,7 @@ class InputController: IMKInputController {
         }
 
         // Characters that map to Cyrillic (] [ ; ' `) should be buffered too
-        let mappableChars: Set<Character> = ["]", "[", ";", "'", "`"]
+        let mappableChars: Set<Character> = ["]", "[", ";", "'", "`", "\\"]
         let isMappable = (char.isLetter && char.isASCII) || mappableChars.contains(char)
 
         // Non-mappable punctuation/symbols: commit current word, pass through
@@ -297,7 +325,24 @@ class InputController: IMKInputController {
         detector.resetContext()
         composingBuffer = ""
         pendingWord = nil
-        NSLog("LangAutoSwitcher: Activated (default=%@)", detector.defaultLanguage.rawValue)
+
+        // Detect if we're in a terminal app
+        isTerminalApp = false
+        if let client = sender as? IMKTextInput,
+           let bundleID = client.bundleIdentifier() {
+            if Self.terminalBundleIDs.contains(bundleID) {
+                isTerminalApp = true
+            } else {
+                for prefix in Self.terminalPrefixes {
+                    if bundleID.hasPrefix(prefix) {
+                        isTerminalApp = true
+                        break
+                    }
+                }
+            }
+            NSLog("LangAutoSwitcher: Activated for '%@' (terminal=%d, default=%@)",
+                  bundleID, isTerminalApp, detector.defaultLanguage.rawValue)
+        }
     }
 
     override func deactivateServer(_ sender: Any!) {
