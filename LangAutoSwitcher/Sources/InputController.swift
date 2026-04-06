@@ -86,8 +86,11 @@ class InputController: IMKInputController {
         // Handle special keys
         switch char {
         case "\r", "\n":
-            // Return/Enter — commit everything and pass through
-            forceCommitAll(client: client)
+            // Return/Enter — commit raw Latin text WITHOUT conversion.
+            // Space = convert, Enter = submit as-is.
+            // This prevents Chrome address bar from getting Bulgarian text
+            // when user wants to navigate to a URL or accept autocomplete.
+            commitRawLatin(client: client)
             return false
 
         case "\u{1B}":
@@ -249,6 +252,24 @@ class InputController: IMKInputController {
                               replacementRange: NSRange(location: NSNotFound, length: 0))
             composingBuffer = ""
         }
+    }
+
+    /// Commit raw Latin text without any conversion.
+    /// Used on Enter — the user wants to submit/accept what they see, not convert.
+    private func commitRawLatin(client: IMKTextInput) {
+        var raw = ""
+        if let pending = pendingWord {
+            raw += pending + " "
+        }
+        if !composingBuffer.isEmpty {
+            raw += composingBuffer
+        }
+        if !raw.isEmpty {
+            client.insertText(raw,
+                              replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        composingBuffer = ""
+        pendingWord = nil
     }
 
     /// Cancel composition without committing.
