@@ -16,8 +16,14 @@ targets:
     platform: macOS
     sources:
       - path: LangAutoSwitcher/Sources
-    resources:
-      - path: LangAutoSwitcher/Resources
+      - path: LangAutoSwitcher/Resources/bg-dictionary.txt
+        buildPhase: resources
+      - path: LangAutoSwitcher/Resources/en-dictionary.txt
+        buildPhase: resources
+      - path: LangAutoSwitcher/Resources/icon.tiff
+        buildPhase: resources
+      - path: LangAutoSwitcher/Resources/AppIcon.icns
+        buildPhase: resources
     info:
       path: LangAutoSwitcher/Resources/Info.plist
       properties:
@@ -30,6 +36,7 @@ targets:
           - Latn
           - Cyrl
         tsInputMethodIconFileKey: icon.tiff
+        CFBundleIconFile: AppIcon
         TISIntendedLanguage: en
     settings:
       base:

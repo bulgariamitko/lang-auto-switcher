@@ -7,17 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		347C0A8A694FDEB4BF1A74E2 /* bg-dictionary.txt in Resources */ = {isa = PBXBuildFile; fileRef = D44632B8E68385BA16B32986 /* bg-dictionary.txt */; };
+		3803168B1B2A05F9E52C559E /* en-dictionary.txt in Resources */ = {isa = PBXBuildFile; fileRef = BBD412EEC07513075222764E /* en-dictionary.txt */; };
+		3BAFB95DAAE8114AFD54368D /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 078D9FBAE3CC36389ABED17B /* AppIcon.icns */; };
 		4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB94C001B13C79D7434A128D /* LanguageDetector.swift */; };
 		591998EAC59E6129EFC61790 /* PhoneticMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */; };
 		804C4C1ECC7A380E361A836D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 070B2EE2E7D82277DB78B9E9 /* main.swift */; };
+		8C5DE0107EBE2F68FD4320FD /* AutoCorrector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7EA2C7F1A74C6D3B0454A5E /* AutoCorrector.swift */; };
 		BD913790EE7BFC5A725A25A1 /* InputController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D56C03557BAE5E2AA3504C /* InputController.swift */; };
+		EA185251BA11F29B1F166BC3 /* icon.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 77FE3DA9751D9E457E985245 /* icon.tiff */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		070B2EE2E7D82277DB78B9E9 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		078D9FBAE3CC36389ABED17B /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		77FE3DA9751D9E457E985245 /* icon.tiff */ = {isa = PBXFileReference; lastKnownFileType = image.tiff; path = icon.tiff; sourceTree = "<group>"; };
 		7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneticMapper.swift; sourceTree = "<group>"; };
 		AAB9C7E018C571ED406C2834 /* LangAutoSwitcher.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LangAutoSwitcher.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B7EA2C7F1A74C6D3B0454A5E /* AutoCorrector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoCorrector.swift; sourceTree = "<group>"; };
+		BBD412EEC07513075222764E /* en-dictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "en-dictionary.txt"; sourceTree = "<group>"; };
 		C1D56C03557BAE5E2AA3504C /* InputController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputController.swift; sourceTree = "<group>"; };
+		D44632B8E68385BA16B32986 /* bg-dictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "bg-dictionary.txt"; sourceTree = "<group>"; };
 		DB94C001B13C79D7434A128D /* LanguageDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageDetector.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -30,9 +40,22 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		1CE0096E63436D3E17B50E2A /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				078D9FBAE3CC36389ABED17B /* AppIcon.icns */,
+				D44632B8E68385BA16B32986 /* bg-dictionary.txt */,
+				BBD412EEC07513075222764E /* en-dictionary.txt */,
+				77FE3DA9751D9E457E985245 /* icon.tiff */,
+			);
+			name = Resources;
+			path = LangAutoSwitcher/Resources;
+			sourceTree = "<group>";
+		};
 		5B92F40F2F7DBFB1FDBDEDAE /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				B7EA2C7F1A74C6D3B0454A5E /* AutoCorrector.swift */,
 				C1D56C03557BAE5E2AA3504C /* InputController.swift */,
 				DB94C001B13C79D7434A128D /* LanguageDetector.swift */,
 				070B2EE2E7D82277DB78B9E9 /* main.swift */,
@@ -45,6 +68,7 @@
 		6E89E891E30108429DE74347 = {
 			isa = PBXGroup;
 			children = (
+				1CE0096E63436D3E17B50E2A /* Resources */,
 				5B92F40F2F7DBFB1FDBDEDAE /* Sources */,
 				14B5315A86C20E4B610BDA96 /* Products */,
 			);
@@ -58,6 +82,7 @@
 			buildConfigurationList = 2513166D9CEF3A5398C7038E /* Build configuration list for PBXNativeTarget "LangAutoSwitcher" */;
 			buildPhases = (
 				C303DB0100804592647195B6 /* Sources */,
+				805DF9F2A30D0D651E97273F /* Resources */,
 			);
 			buildRules = (
 			);
@@ -103,11 +128,26 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		805DF9F2A30D0D651E97273F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3BAFB95DAAE8114AFD54368D /* AppIcon.icns in Resources */,
+				347C0A8A694FDEB4BF1A74E2 /* bg-dictionary.txt in Resources */,
+				3803168B1B2A05F9E52C559E /* en-dictionary.txt in Resources */,
+				EA185251BA11F29B1F166BC3 /* icon.tiff in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		C303DB0100804592647195B6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8C5DE0107EBE2F68FD4320FD /* AutoCorrector.swift in Sources */,
 				BD913790EE7BFC5A725A25A1 /* InputController.swift in Sources */,
 				4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */,
 				591998EAC59E6129EFC61790 /* PhoneticMapper.swift in Sources */,
