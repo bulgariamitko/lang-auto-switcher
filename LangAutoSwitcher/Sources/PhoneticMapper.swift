@@ -31,6 +31,7 @@ struct PhoneticMapper {
         "u": "у", "v": "ж", "w": "в", "x": "ь", "y": "ъ",
         "z": "з", "q": "я",
         "]": "щ", "[": "ш", ";": "ж", "'": "ь", "`": "ч", "\\": "ю",
+        "}": "Щ", "{": "Ш", ":": "Ж", "\"": "Ь", "~": "Ч", "|": "Ю",
         // Uppercase
         "A": "А", "B": "Б", "C": "Ц", "D": "Д", "E": "Е",
         "F": "Ф", "G": "Г", "H": "Х", "I": "И", "J": "Й",
@@ -78,7 +79,10 @@ struct PhoneticMapper {
     }
 
     /// Characters that are part of typing (letters + special mapped chars).
-    private static let mappableSpecials: Set<Character> = ["]", "[", ";", "'", "`", "\\"]
+    private static let mappableSpecials: Set<Character> = [
+        "]", "[", ";", "'", "`", "\\",
+        "}", "{", ":", "\"", "~", "|"
+    ]
 
     /// Check if a string is entirely typeable characters (ASCII letters + mapped specials).
     static func isLatinWord(_ word: String) -> Bool {

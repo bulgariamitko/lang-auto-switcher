@@ -29,6 +29,7 @@ struct PhoneticMapper {
         "u": "у", "v": "ж", "w": "в", "x": "ь", "y": "ъ",
         "z": "з", "q": "я",
         "]": "щ", "[": "ш", ";": "ж", "'": "ь", "`": "ч", "\\": "ю",
+        "}": "Щ", "{": "Ш", ":": "Ж", "\"": "Ь", "~": "Ч", "|": "Ю",
         "A": "А", "B": "Б", "C": "Ц", "D": "Д", "E": "Е",
         "F": "Ф", "G": "Г", "H": "Х", "I": "И", "J": "Й",
         "K": "К", "L": "Л", "M": "М", "N": "Н", "O": "О",
@@ -123,6 +124,12 @@ test("[ → ш", PhoneticMapper.toCyrillic("[") == "ш")
 test("; → ж", PhoneticMapper.toCyrillic(";") == "ж")
 test("` → ч", PhoneticMapper.toCyrillic("`") == "ч")
 test("\\ → ю", PhoneticMapper.toCyrillic("\\") == "ю")
+test("} → Щ (uppercase)", PhoneticMapper.toCyrillic("}") == "Щ")
+test("{ → Ш (uppercase)", PhoneticMapper.toCyrillic("{") == "Ш")
+test(": → Ж (uppercase)", PhoneticMapper.toCyrillic(":") == "Ж")
+test("\" → Ь (uppercase)", PhoneticMapper.toCyrillic("\"") == "Ь")
+test("~ → Ч (uppercase)", PhoneticMapper.toCyrillic("~") == "Ч")
+test("| → Ю (uppercase)", PhoneticMapper.toCyrillic("|") == "Ю")
 
 // Digraphs
 test("sh → ш", PhoneticMapper.toCyrillic("sh") == "ш")
@@ -152,6 +159,8 @@ let wordTests: [(String, String, String)] = [
     ("mashina", "машина", "machine"),
     ("uchilishte", "училище", "school (with digraph)"),
     ("prewkl\\`wam", "превключвам", "to switch (with \\ → ю)"),
+    ("~ajnika", "Чайника", "the kettle (uppercase Ч via ~)"),
+    ("|nikod", "Юникод", "unicode (uppercase Ю via |)"),
 ]
 
 print("\n📋 WORD MAPPING TESTS")
@@ -246,12 +255,15 @@ let scenarios: [Scenario] = [
     // not testable in simplified simulator — tested separately below)
 
 
-    // Language switching: BG to EN
+    // Language switching: BG to EN — only ambiguous words after a switch
+    // follow the new flow if the streak supports it.
+    // "want write" are exclusive EN; "to" between them is ambiguous and
+    // follows the dominant recent language.
     Scenario(
-        name: "BG→EN switch: napisah now kod want to write in english",
-        words: ["napisah", "now", "kod", "want", "to", "write"],
-        expectedLangs: ["BG", "BG", "BG", "EN", "EN", "EN"],
-        expectedOutputs: ["написах", "нов", "код", "want", "to", "write"]
+        name: "BG→EN switch: napisah now kod want write",
+        words: ["napisah", "now", "kod", "want", "write"],
+        expectedLangs: ["BG", "BG", "BG", "EN", "EN"],
+        expectedOutputs: ["написах", "нов", "код", "want", "write"]
     ),
 
     // EN streak should not break on false BG match
@@ -269,6 +281,16 @@ let scenarios: [Scenario] = [
         words: ["koj", "prawi", "pdf"],
         expectedLangs: ["BG", "BG", "BG"],
         expectedOutputs: ["кой", "прави", "пдф"]
+    ),
+
+    // Foreign word in BG flow shouldn't flip subsequent ambiguous words.
+    // "link" is exclusive EN, but "i ne se" after it should still be Bulgarian
+    // because the dominant recent history is BG.
+    Scenario(
+        name: "BG flow with foreign EN word: wywedoh tozi link i ne se polu`awa",
+        words: ["wywedoh", "tozi", "link", "i", "ne", "se", "polu`awa"],
+        expectedLangs: ["BG", "BG", "EN", "BG", "BG", "BG", "BG"],
+        expectedOutputs: ["въведох", "този", "link", "и", "не", "се", "получава"]
     ),
 
     // BG with special chars
@@ -290,6 +312,16 @@ func simulateDetection(words: [String], bgDict: Set<String>, enDict: Set<String>
     var results: [(String, String)] = []
     var lastLang = "??"
     var streak = 0
+    // Track confident detections (exclusive matches) for dominant-history calculation
+    var confidentHistory: [String] = []  // "BG" or "EN", only confidence-1.0 matches
+
+    func dominantLanguage() -> String {
+        let bg = confidentHistory.filter { $0 == "BG" }.count
+        let en = confidentHistory.filter { $0 == "EN" }.count
+        if bg > en { return "BG" }
+        if en > bg { return "EN" }
+        return "??"
+    }
 
     for word in words {
         let lower = word.lowercased()
@@ -301,6 +333,7 @@ func simulateDetection(words: [String], bgDict: Set<String>, enDict: Set<String>
 
         var lang: String
         var output: String
+        var isConfident = false
 
         if inBG && !inEN {
             // Exclusive BG — but check streak protection
@@ -310,6 +343,7 @@ func simulateDetection(words: [String], bgDict: Set<String>, enDict: Set<String>
             } else {
                 lang = "BG"
                 output = cyrillic
+                isConfident = true
             }
         } else if inEN && !inBG {
             // Exclusive EN — but check streak protection
@@ -319,10 +353,18 @@ func simulateDetection(words: [String], bgDict: Set<String>, enDict: Set<String>
             } else {
                 lang = "EN"
                 output = word
+                isConfident = true
             }
         } else if inBG && inEN {
-            // Ambiguous — follow previous word
-            if lastLang == "BG" {
+            // Ambiguous — follow DOMINANT history (not just last word)
+            let dominant = dominantLanguage()
+            if dominant == "BG" {
+                lang = "BG"
+                output = cyrillic
+            } else if dominant == "EN" {
+                lang = "EN"
+                output = word
+            } else if lastLang == "BG" {
                 lang = "BG"
                 output = cyrillic
             } else {
@@ -342,6 +384,12 @@ func simulateDetection(words: [String], bgDict: Set<String>, enDict: Set<String>
 
         if lang == lastLang { streak += 1 } else { streak = 1 }
         lastLang = lang
+        if isConfident {
+            confidentHistory.append(lang)
+            if confidentHistory.count > 6 {
+                confidentHistory.removeFirst()
+            }
+        }
         results.append((lang, output))
     }
     return results

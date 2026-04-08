@@ -270,10 +270,22 @@ final class LanguageDetector {
     // MARK: - Ambiguous resolution
 
     private func resolveAmbiguous(word: String, cyrillic: String) -> (DetectedLanguage, String, Double) {
-        if lastWordLanguage == .bulgarian {
+        // Look at the dominant language in recent CONFIDENT history,
+        // not just the last word. This way "link" (one English word in BG flow)
+        // doesn't flip the entire flow — "i ne se" after it still follow BG.
+        let dominant = dominantRecentLanguage()
+
+        if dominant == .bulgarian {
             return (.bulgarian, cyrillic, 0.9)
-        } else if lastWordLanguage == .english {
+        } else if dominant == .english {
             return (.english, word, 0.9)
+        }
+
+        // No dominant — fall back to immediately previous word
+        if lastWordLanguage == .bulgarian {
+            return (.bulgarian, cyrillic, 0.8)
+        } else if lastWordLanguage == .english {
+            return (.english, word, 0.8)
         }
 
         let contextPhrase = (recentLatinWords + [word]).joined(separator: " ")
@@ -291,6 +303,22 @@ final class LanguageDetector {
             return (.bulgarian, cyrillic, 0.5)
         }
         return (.english, word, 0.5)
+    }
+
+    /// Returns the dominant language in recent CONFIDENT history.
+    /// Only counts words that were detected with confidence >= 0.9 (exclusive matches).
+    /// Returns .uncertain if no clear majority.
+    private func dominantRecentLanguage() -> DetectedLanguage {
+        var bgCount = 0
+        var enCount = 0
+        for (idx, lang) in recentLanguages.enumerated() {
+            guard recentConfidences[idx] >= 0.9 else { continue }
+            if lang == .bulgarian { bgCount += 1 }
+            else if lang == .english { enCount += 1 }
+        }
+        if bgCount > enCount { return .bulgarian }
+        if enCount > bgCount { return .english }
+        return .uncertain
     }
 
     // MARK: - Unknown resolution

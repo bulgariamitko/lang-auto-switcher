@@ -111,14 +111,28 @@ class InputController: IMKInputController {
             break
         }
 
-        // Characters that map to Cyrillic (] [ ; ' `) should be buffered too
-        let mappableChars: Set<Character> = ["]", "[", ";", "'", "`", "\\"]
-        let isMappable = (char.isLetter && char.isASCII) || mappableChars.contains(char)
+        // Characters that map to Cyrillic should be buffered
+        let mappableChars: Set<Character> = [
+            "]", "[", ";", "'", "`", "\\",
+            "}", "{", ":", "\"", "~", "|"
+        ]
+        // Email/URL/path chars — buffer them so we can detect emails/URLs and keep them Latin
+        let emailUrlChars: Set<Character> = [".", "@", "-", "_", "/", "+"]
+        let isLetter = char.isLetter && char.isASCII
+        let isDigit = char.isNumber && char.isASCII
+        let isMappable = isLetter || mappableChars.contains(char)
+        let isEmailUrl = emailUrlChars.contains(char) || isDigit
 
-        // Non-mappable punctuation/symbols: commit current word, pass through
-        if !isMappable {
+        // Non-mappable, non-email chars: commit current word, pass through
+        if !isMappable && !isEmailUrl {
             forceCommitAll(client: client)
             return false  // Let the character pass through
+        }
+
+        // Email/URL/digit chars: only buffer if we're already composing
+        // (otherwise let them pass through normally)
+        if !isMappable && isEmailUrl && composingBuffer.isEmpty && pendingWord == nil {
+            return false  // Let it pass through
         }
 
         // It's a mappable character — add to our composing buffer
@@ -166,6 +180,21 @@ class InputController: IMKInputController {
 
         let word = composingBuffer
         composingBuffer = ""
+
+        // Email/URL detection: if buffer contains @ or has URL-like patterns,
+        // commit as raw Latin without conversion.
+        if isEmailOrUrl(word) {
+            // Commit pending word too if any (also as raw, since it's likely the local-part)
+            var fullText = ""
+            if let pending = pendingWord {
+                fullText = pending
+            }
+            fullText += word
+            client.insertText(fullText,
+                              replacementRange: NSRange(location: NSNotFound, length: 0))
+            pendingWord = nil
+            return
+        }
 
         // Check if this word is ambiguous (in both dictionaries)
         let lower = word.lowercased()
@@ -252,6 +281,24 @@ class InputController: IMKInputController {
                               replacementRange: NSRange(location: NSNotFound, length: 0))
             composingBuffer = ""
         }
+    }
+
+    /// Detect if a word is an email, URL, file path, or similar Latin-only construct.
+    private func isEmailOrUrl(_ word: String) -> Bool {
+        // Contains @ → email
+        if word.contains("@") { return true }
+        // Contains / → URL or path
+        if word.contains("/") { return true }
+        // Contains a digit → likely identifier/code/version
+        if word.contains(where: { $0.isNumber }) { return true }
+        // Contains . with letters around it → domain (e.g., gmail.com, foo.bar)
+        if word.contains(".") {
+            let parts = word.split(separator: ".")
+            if parts.count >= 2 && parts.allSatisfy({ !$0.isEmpty }) {
+                return true
+            }
+        }
+        return false
     }
 
     /// Commit raw Latin text without any conversion.
