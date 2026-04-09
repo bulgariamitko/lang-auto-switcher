@@ -89,6 +89,13 @@ struct PhoneticMapper {
         !word.isEmpty && word.allSatisfy { ($0.isLetter && $0.isASCII) || mappableSpecials.contains($0) }
     }
 
+    /// Convert Latin text to Cyrillic WITHOUT digraphs (single-char mapping only).
+    /// Used as fallback when the digraph version doesn't match a dictionary word.
+    /// e.g., "razhod" → "разход" (з+х) instead of "ражод" (ж)
+    static func toCyrillicNoDigraphs(_ text: String) -> String {
+        String(text.map { singleMap[$0] ?? $0 })
+    }
+
     /// Check if a string contains Cyrillic characters.
     static func containsCyrillic(_ text: String) -> Bool {
         text.unicodeScalars.contains { (0x0400...0x04FF).contains($0.value) }

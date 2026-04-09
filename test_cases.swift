@@ -38,6 +38,10 @@ struct PhoneticMapper {
         "Z": "З", "Q": "Я",
     ]
 
+    static func toCyrillicNoDigraphs(_ text: String) -> String {
+        String(text.map { singleMap[$0] ?? $0 })
+    }
+
     static func toCyrillic(_ text: String) -> String {
         var result = ""
         var i = text.startIndex
@@ -160,6 +164,9 @@ let wordTests: [(String, String, String)] = [
     ("uchilishte", "училище", "school (with digraph)"),
     ("prewkl\\`wam", "превключвам", "to switch (with \\ → ю)"),
     ("~ajnika", "Чайника", "the kettle (uppercase Ч via ~)"),
+    ("po-skoro", "по-скоро", "sooner (hyphenated BG word)"),
+    ("po-dobre", "по-добре", "better (hyphenated BG word)"),
+    // "razhod" → "разход" is tested via scenario (digraph fallback is detector-level)
     ("|nikod", "Юникод", "unicode (uppercase Ю via |)"),
 ]
 
@@ -287,10 +294,18 @@ let scenarios: [Scenario] = [
     // "link" is exclusive EN, but "i ne se" after it should still be Bulgarian
     // because the dominant recent history is BG.
     Scenario(
-        name: "BG flow with foreign EN word: wywedoh tozi link i ne se polu`awa",
+        name: "BG flow: wywedoh tozi link i ne se polu`awa (link now in both dicts)",
         words: ["wywedoh", "tozi", "link", "i", "ne", "se", "polu`awa"],
-        expectedLangs: ["BG", "BG", "EN", "BG", "BG", "BG", "BG"],
-        expectedOutputs: ["въведох", "този", "link", "и", "не", "се", "получава"]
+        expectedLangs: ["BG", "BG", "BG", "BG", "BG", "BG", "BG"],
+        expectedOutputs: ["въведох", "този", "линк", "и", "не", "се", "получава"]
+    ),
+
+    // Digraph fallback: razhod → разход (zh as з+х, not ж)
+    Scenario(
+        name: "BG digraph fallback: razhod → разход",
+        words: ["tozi", "razhod"],
+        expectedLangs: ["BG", "BG"],
+        expectedOutputs: ["този", "разход"]
     ),
 
     // BG with special chars
@@ -325,11 +340,21 @@ func simulateDetection(words: [String], bgDict: Set<String>, enDict: Set<String>
 
     for word in words {
         let lower = word.lowercased()
-        let cyrillic = PhoneticMapper.toCyrillic(word)
-        let cyrillicLower = cyrillic.lowercased()
+        var cyrillic = PhoneticMapper.toCyrillic(word)
+        var cyrillicLower = cyrillic.lowercased()
 
         let inEN = enDict.contains(lower)
-        let inBG = bgDict.contains(cyrillicLower)
+        var inBG = bgDict.contains(cyrillicLower)
+
+        // Digraph fallback: if digraph version not in dict, try without digraphs
+        if !inBG {
+            let alt = PhoneticMapper.toCyrillicNoDigraphs(word)
+            if bgDict.contains(alt.lowercased()) {
+                cyrillic = alt
+                cyrillicLower = alt.lowercased()
+                inBG = true
+            }
+        }
 
         var lang: String
         var output: String

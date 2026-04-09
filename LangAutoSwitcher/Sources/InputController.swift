@@ -196,6 +196,34 @@ class InputController: IMKInputController {
             return
         }
 
+        // Hyphenated words: split on hyphen, process each part, rejoin.
+        // e.g., "po-skoro" → process "po" and "skoro" separately → "по-скоро"
+        if word.contains("-") {
+            let parts = word.split(separator: "-", omittingEmptySubsequences: false)
+            let converted = parts.map { part -> String in
+                let partStr = String(part)
+                if partStr.isEmpty { return "" }
+                let result = detector.processWord(partStr)
+                return result.converted
+            }
+            let output = converted.joined(separator: "-")
+
+            // Also resolve pending word if any
+            if let pending = pendingWord {
+                let pendingCyrillic = PhoneticMapper.toCyrillic(pending)
+                // Use the first part's detection to resolve pending
+                let firstResult = detector.processWord(String(parts.first ?? ""))
+                let pendingOutput = firstResult.language == .bulgarian ? pendingCyrillic : pending
+                client.insertText(pendingOutput + " " + output,
+                                  replacementRange: NSRange(location: NSNotFound, length: 0))
+                pendingWord = nil
+            } else {
+                client.insertText(output,
+                                  replacementRange: NSRange(location: NSNotFound, length: 0))
+            }
+            return
+        }
+
         // Check if this word is ambiguous (in both dictionaries)
         let lower = word.lowercased()
         let cyrillic = PhoneticMapper.toCyrillic(word)
