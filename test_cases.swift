@@ -11,16 +11,6 @@ import NaturalLanguage
 // ============================================================================
 
 struct PhoneticMapper {
-    private static let digraphs: [(latin: String, cyrillic: String)] = [
-        ("sht", "щ"), ("SHT", "Щ"), ("Sht", "Щ"),
-        ("sh", "ш"), ("SH", "Ш"), ("Sh", "Ш"),
-        ("zh", "ж"), ("ZH", "Ж"), ("Zh", "Ж"),
-        ("ch", "ч"), ("CH", "Ч"), ("Ch", "Ч"),
-        ("ts", "ц"), ("TS", "Ц"), ("Ts", "Ц"),
-        ("yu", "ю"), ("YU", "Ю"), ("Yu", "Ю"),
-        ("ya", "я"), ("YA", "Я"), ("Ya", "Я"),
-    ]
-
     private static let singleMap: [Character: Character] = [
         "a": "а", "b": "б", "c": "ц", "d": "д", "e": "е",
         "f": "ф", "g": "г", "h": "х", "i": "и", "j": "й",
@@ -38,38 +28,8 @@ struct PhoneticMapper {
         "Z": "З", "Q": "Я",
     ]
 
-    static func toCyrillicNoDigraphs(_ text: String) -> String {
-        String(text.map { singleMap[$0] ?? $0 })
-    }
-
     static func toCyrillic(_ text: String) -> String {
-        var result = ""
-        var i = text.startIndex
-        while i < text.endIndex {
-            var matched = false
-            for (latin, cyrillic) in digraphs {
-                let end = text.index(i, offsetBy: latin.count, limitedBy: text.endIndex)
-                if let end = end {
-                    let substring = String(text[i..<end])
-                    if substring == latin {
-                        result += cyrillic
-                        i = end
-                        matched = true
-                        break
-                    }
-                }
-            }
-            if !matched {
-                let char = text[i]
-                if let mapped = singleMap[char] {
-                    result.append(mapped)
-                } else {
-                    result.append(char)
-                }
-                i = text.index(after: i)
-            }
-        }
-        return result
+        String(text.map { singleMap[$0] ?? $0 })
     }
 }
 
@@ -136,13 +96,8 @@ test("~ → Ч (uppercase)", PhoneticMapper.toCyrillic("~") == "Ч")
 test("| → Ю (uppercase)", PhoneticMapper.toCyrillic("|") == "Ю")
 
 // Digraphs
-test("sh → ш", PhoneticMapper.toCyrillic("sh") == "ш")
-test("zh → ж", PhoneticMapper.toCyrillic("zh") == "ж")
-test("ch → ч", PhoneticMapper.toCyrillic("ch") == "ч")
-test("sht → щ", PhoneticMapper.toCyrillic("sht") == "щ")
-test("ya → я", PhoneticMapper.toCyrillic("ya") == "я")
-test("yu → ю", PhoneticMapper.toCyrillic("yu") == "ю")
-test("ts → ц", PhoneticMapper.toCyrillic("ts") == "ц")
+// No digraphs — strict 1-to-1 mapping. Use special keys instead:
+// [ → ш, ; → ж, ` → ч, ] → щ, \ → ю, q → я, c → ц
 
 // Full words
 let wordTests: [(String, String, String)] = [
@@ -150,7 +105,7 @@ let wordTests: [(String, String, String)] = [
     ("kak", "как", "how"),
     ("si", "си", "you are"),
     ("dobre", "добре", "good"),
-    ("blagodarya", "благодаря", "thank you"),
+    ("blagodarq", "благодаря", "thank you (q → я)"),
     ("nared", "наред", "in order"),
     ("we`e", "вече", "already"),
     ("ne]ata", "нещата", "the things"),
@@ -160,13 +115,13 @@ let wordTests: [(String, String, String)] = [
     ("hubaw", "хубав", "nice"),
     ("mnogo", "много", "a lot"),
     ("zdrawej", "здравей", "hello"),
-    ("mashina", "машина", "machine"),
-    ("uchilishte", "училище", "school (with digraph)"),
+    ("ma[ina", "машина", "machine ([ → ш)"),
+    ("u`ili]e", "училище", "school (` → ч, ] → щ)"),
     ("prewkl\\`wam", "превключвам", "to switch (with \\ → ю)"),
     ("~ajnika", "Чайника", "the kettle (uppercase Ч via ~)"),
     ("po-skoro", "по-скоро", "sooner (hyphenated BG word)"),
     ("po-dobre", "по-добре", "better (hyphenated BG word)"),
-    // "razhod" → "разход" is tested via scenario (digraph fallback is detector-level)
+    ("razhod", "разход", "expense (r-a-z-h-o-d, no digraphs)"),
     ("|nikod", "Юникод", "unicode (uppercase Ю via |)"),
 ]
 
@@ -300,9 +255,9 @@ let scenarios: [Scenario] = [
         expectedOutputs: ["въведох", "този", "линк", "и", "не", "се", "получава"]
     ),
 
-    // Digraph fallback: razhod → разход (zh as з+х, not ж)
+    // razhod now maps directly: r→р a→а z→з h→х o→о d→д = разход
     Scenario(
-        name: "BG digraph fallback: razhod → разход",
+        name: "BG: razhod → разход (no digraphs)",
         words: ["tozi", "razhod"],
         expectedLangs: ["BG", "BG"],
         expectedOutputs: ["този", "разход"]
@@ -346,15 +301,7 @@ func simulateDetection(words: [String], bgDict: Set<String>, enDict: Set<String>
         let inEN = enDict.contains(lower)
         var inBG = bgDict.contains(cyrillicLower)
 
-        // Digraph fallback: if digraph version not in dict, try without digraphs
-        if !inBG {
-            let alt = PhoneticMapper.toCyrillicNoDigraphs(word)
-            if bgDict.contains(alt.lowercased()) {
-                cyrillic = alt
-                cyrillicLower = alt.lowercased()
-                inBG = true
-            }
-        }
+        // No digraphs — toCyrillic is already strict 1-to-1
 
         var lang: String
         var output: String

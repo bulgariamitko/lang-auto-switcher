@@ -120,27 +120,12 @@ final class LanguageDetector {
             }
         }
 
-        // 3. Convert to Cyrillic and check both dictionaries.
-        //    Try digraph version first, then no-digraph as fallback.
-        //    e.g., "razhod" → try "ражод" (not in dict) → try "разход" (in dict!) → use "разход"
-        var cyrillic = PhoneticMapper.toCyrillic(word)
-        var cyrillicLower = cyrillic.lowercased()
+        // 3. Convert to Cyrillic (1-to-1 mapping) and check both dictionaries
+        let cyrillic = PhoneticMapper.toCyrillic(word)
+        let cyrillicLower = cyrillic.lowercased()
 
         let isEnglish = enDictionary.contains(lower)
-        var isBulgarian = bgDictionary.contains(cyrillicLower)
-
-        // If digraph version is not in BG dict, try without digraphs
-        if !isBulgarian {
-            let altCyrillic = PhoneticMapper.toCyrillicNoDigraphs(word)
-            let altLower = altCyrillic.lowercased()
-            if bgDictionary.contains(altLower) {
-                cyrillic = altCyrillic
-                cyrillicLower = altLower
-                isBulgarian = true
-                NSLog("LangAutoSwitcher: digraph fallback '%@' → '%@' (was '%@')",
-                      word, altCyrillic, PhoneticMapper.toCyrillic(word))
-            }
-        }
+        let isBulgarian = bgDictionary.contains(cyrillicLower)
 
         var detected: DetectedLanguage
         var output: String

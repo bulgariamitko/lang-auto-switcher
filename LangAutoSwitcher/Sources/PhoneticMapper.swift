@@ -6,22 +6,9 @@ import Foundation
 /// and single-character mappings (a→а, b→б, w→в, etc.).
 struct PhoneticMapper {
 
-    // MARK: - Transliteration rules
+    // MARK: - Character mapping (strict 1-to-1)
 
-    /// Multi-character mappings (checked first, longest match wins).
-    private static let digraphs: [(latin: String, cyrillic: String)] = [
-        // Trigraphs first (longest match)
-        ("sht", "щ"), ("SHT", "Щ"), ("Sht", "Щ"),
-        // Digraphs
-        ("sh", "ш"), ("SH", "Ш"), ("Sh", "Ш"),
-        ("zh", "ж"), ("ZH", "Ж"), ("Zh", "Ж"),
-        ("ch", "ч"), ("CH", "Ч"), ("Ch", "Ч"),
-        ("ts", "ц"), ("TS", "Ц"), ("Ts", "Ц"),
-        ("yu", "ю"), ("YU", "Ю"), ("Yu", "Ю"),
-        ("ya", "я"), ("YA", "Я"), ("Ya", "Я"),
-    ]
-
-    /// Single character mappings.
+    /// Single character mappings. Every Latin key maps to exactly one Cyrillic character.
     private static let singleMap: [Character: Character] = [
         // Lowercase
         "a": "а", "b": "б", "c": "ц", "d": "д", "e": "е",
@@ -41,41 +28,9 @@ struct PhoneticMapper {
         "Z": "З", "Q": "Я",
     ]
 
-    /// Convert Latin text to Cyrillic using transliteration.
-    /// Processes digraphs/trigraphs first (longest match), then single chars.
+    /// Convert Latin text to Cyrillic. Strict 1-to-1 character mapping.
     static func toCyrillic(_ text: String) -> String {
-        var result = ""
-        var i = text.startIndex
-
-        while i < text.endIndex {
-            var matched = false
-
-            // Try digraphs/trigraphs (longest first — they're sorted by length desc)
-            for (latin, cyrillic) in digraphs {
-                let end = text.index(i, offsetBy: latin.count, limitedBy: text.endIndex)
-                if let end = end {
-                    let substring = String(text[i..<end])
-                    if substring == latin {
-                        result += cyrillic
-                        i = end
-                        matched = true
-                        break
-                    }
-                }
-            }
-
-            if !matched {
-                let char = text[i]
-                if let mapped = singleMap[char] {
-                    result.append(mapped)
-                } else {
-                    result.append(char) // spaces, punctuation, digits pass through
-                }
-                i = text.index(after: i)
-            }
-        }
-
-        return result
+        String(text.map { singleMap[$0] ?? $0 })
     }
 
     /// Characters that are part of typing (letters + special mapped chars).
@@ -87,13 +42,6 @@ struct PhoneticMapper {
     /// Check if a string is entirely typeable characters (ASCII letters + mapped specials).
     static func isLatinWord(_ word: String) -> Bool {
         !word.isEmpty && word.allSatisfy { ($0.isLetter && $0.isASCII) || mappableSpecials.contains($0) }
-    }
-
-    /// Convert Latin text to Cyrillic WITHOUT digraphs (single-char mapping only).
-    /// Used as fallback when the digraph version doesn't match a dictionary word.
-    /// e.g., "razhod" → "разход" (з+х) instead of "ражод" (ж)
-    static func toCyrillicNoDigraphs(_ text: String) -> String {
-        String(text.map { singleMap[$0] ?? $0 })
     }
 
     /// Check if a string contains Cyrillic characters.
