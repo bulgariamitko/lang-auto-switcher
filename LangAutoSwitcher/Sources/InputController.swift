@@ -81,6 +81,17 @@ class InputController: IMKInputController {
             return false
         }
 
+        // Arrow keys — user is navigating, not typing.
+        // Commit raw Latin (like Enter) and let the arrow pass through.
+        // Converting on navigation destroys the text the user is trying to edit.
+        switch event.keyCode {
+        case 123, 124, 125, 126:  // Left, Right, Down, Up
+            commitRawLatin(client: client)
+            return false
+        default:
+            break
+        }
+
         let char = chars.first!
 
         // Handle special keys
@@ -125,6 +136,12 @@ class InputController: IMKInputController {
 
         // Non-mappable, non-email chars: commit current word, pass through
         if !isMappable && !isEmailUrl {
+            // Emoticon detection: buffer like ":", ";", "=", ":-", ":'" followed by
+            // ")", "(", "*", "|" etc. should stay raw ASCII (e.g., ":)", ":-(", ":*").
+            if Self.isEmoticonPrefix(composingBuffer) && Self.isEmoticonBody(char) {
+                commitBufferRaw(client: client)
+                return false  // Let the body char pass through to form the emoticon
+            }
             forceCommitAll(client: client)
             return false  // Let the character pass through
         }
@@ -178,8 +195,40 @@ class InputController: IMKInputController {
             return
         }
 
-        let word = composingBuffer
+        let rawBuffer = composingBuffer
         composingBuffer = ""
+
+        // Strip trailing punctuation (., , ! ? : ;) before processing.
+        // These get buffered for email/URL detection but shouldn't affect word detection.
+        // Reattach after conversion.
+        let trailingPunct: Set<Character> = [".", ",", "!", "?"]
+        var word = rawBuffer
+        var trailing = ""
+        while let last = word.last, trailingPunct.contains(last) {
+            trailing = String(last) + trailing
+            word.removeLast()
+        }
+
+        // If only punctuation, just commit as-is
+        guard !word.isEmpty else {
+            client.insertText(trailing,
+                              replacementRange: NSRange(location: NSNotFound, length: 0))
+            return
+        }
+
+        // Emoticon detection: :D, :P, :-D, xD, etc. should stay raw ASCII.
+        if Self.isEmoticon(word) {
+            var fullText = ""
+            if let pending = pendingWord {
+                let result = detector.processWord(pending)
+                fullText = result.converted + " "
+                pendingWord = nil
+            }
+            fullText += word + trailing
+            client.insertText(fullText,
+                              replacementRange: NSRange(location: NSNotFound, length: 0))
+            return
+        }
 
         // Email/URL detection: if buffer contains @ or has URL-like patterns,
         // commit as raw Latin without conversion.
@@ -189,7 +238,7 @@ class InputController: IMKInputController {
             if let pending = pendingWord {
                 fullText = pending
             }
-            fullText += word
+            fullText += word + trailing
             client.insertText(fullText,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
             pendingWord = nil
@@ -197,7 +246,6 @@ class InputController: IMKInputController {
         }
 
         // Hyphenated words: split on hyphen, process each part, rejoin.
-        // e.g., "po-skoro" → process "po" and "skoro" separately → "по-скоро"
         if word.contains("-") {
             let parts = word.split(separator: "-", omittingEmptySubsequences: false)
             let converted = parts.map { part -> String in
@@ -206,12 +254,10 @@ class InputController: IMKInputController {
                 let result = detector.processWord(partStr)
                 return result.converted
             }
-            let output = converted.joined(separator: "-")
+            let output = converted.joined(separator: "-") + trailing
 
-            // Also resolve pending word if any
             if let pending = pendingWord {
                 let pendingCyrillic = PhoneticMapper.toCyrillic(pending)
-                // Use the first part's detection to resolve pending
                 let firstResult = detector.processWord(String(parts.first ?? ""))
                 let pendingOutput = firstResult.language == .bulgarian ? pendingCyrillic : pending
                 client.insertText(pendingOutput + " " + output,
@@ -233,14 +279,7 @@ class InputController: IMKInputController {
         let isAmbiguous = isEnglish && isBulgarian
 
         if pendingWord != nil {
-            // We have a pending ambiguous word — now we can resolve both.
-            // Process the SECOND word first to establish context.
             let secondResult = detector.processWord(word)
-
-            // Now re-process the pending word — context from the second word will guide it
-            // Reset context first, then process pending, then second again
-            // Actually, the second word already set the context. Let's use that context
-            // to determine what the pending word should have been.
             let pendingCyrillic = PhoneticMapper.toCyrillic(pendingWord!)
             let pendingOutput: String
             if secondResult.language == .bulgarian {
@@ -252,29 +291,33 @@ class InputController: IMKInputController {
             NSLog("LangAutoSwitcher: pending '%@' → '%@' (resolved by '%@'→'%@' [%@])",
                   pendingWord!, pendingOutput, word, secondResult.converted, secondResult.language.rawValue)
 
-            // Commit: pending word + space + second word
-            let fullText = pendingOutput + " " + secondResult.converted
+            let fullText = pendingOutput + " " + secondResult.converted + trailing
             client.insertText(fullText,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
             pendingWord = nil
 
         } else if isAmbiguous && detector.isFirstWord {
-            // First word with no context AND ambiguous — hold it
+            // First word, ambiguous — hold it. Reattach trailing to buffer for later.
             pendingWord = word
-            NSLog("LangAutoSwitcher: holding ambiguous first word '%@'", word)
-            // Keep it as marked text (underlined) — don't commit yet
-            // The space will be inserted when we resolve it
-            updateMarkedText(client: client)
+            // If there's trailing punctuation, we can't hold — force commit
+            if !trailing.isEmpty {
+                let result = detector.processWord(word)
+                client.insertText(result.converted + trailing,
+                                  replacementRange: NSRange(location: NSNotFound, length: 0))
+                pendingWord = nil
+            } else {
+                NSLog("LangAutoSwitcher: holding ambiguous first word '%@'", word)
+                updateMarkedText(client: client)
+            }
 
         } else {
-            // Normal case — process and commit immediately
             let result = detector.processWord(word)
 
             NSLog("LangAutoSwitcher: '%@' → '%@' [%@, %.2f]",
                   word, result.converted,
                   result.language.rawValue, result.confidence)
 
-            client.insertText(result.converted,
+            client.insertText(result.converted + trailing,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
         }
     }
@@ -327,6 +370,61 @@ class InputController: IMKInputController {
             }
         }
         return false
+    }
+
+    // MARK: - Emoticon detection
+
+    /// Buffer contents that, followed by an emoticon body char, form an emoticon.
+    /// (Used before force-commit when next char is non-mappable punctuation like ")")
+    private static let emoticonPrefixes: Set<String> = [
+        ":", ";", "=", ":-", ";-", "=-", ":'", ";'",
+    ]
+
+    /// Non-mappable, non-email chars that indicate an emoticon body
+    /// when they follow an emoticon prefix (e.g., ")" in ":)", "*" in ":*").
+    private static let emoticonBodyChars: Set<Character> = [
+        ")", "(", "*", "|",
+    ]
+
+    /// Complete emoticons that may end up fully buffered and committed via space/punct.
+    /// These typically have letter bodies (D, P, O) or digit bodies (3) that stay in buffer.
+    private static let knownEmoticons: Set<String> = [
+        ":D", ":P", ":p", ":O", ":o", ":3", ":X", ":x",
+        ";D", ";P", ";p",
+        "=D", "=P", "=p",
+        ":-D", ":-P", ":-p", ":-O", ":-o", ":-3",
+        ";-D", ";-P", ";-p",
+        ":'D",
+        "xD", "XD", "xP", "XP",
+    ]
+
+    private static func isEmoticonPrefix(_ buffer: String) -> Bool {
+        emoticonPrefixes.contains(buffer)
+    }
+
+    private static func isEmoticonBody(_ char: Character) -> Bool {
+        emoticonBodyChars.contains(char)
+    }
+
+    static func isEmoticon(_ word: String) -> Bool {
+        knownEmoticons.contains(word)
+    }
+
+    /// Commit pending word (converted normally) + composing buffer (raw ASCII).
+    /// Used when buffer is an emoticon prefix and the upcoming char completes it.
+    private func commitBufferRaw(client: IMKTextInput) {
+        var output = ""
+        if let pending = pendingWord {
+            let result = detector.processWord(pending)
+            output = result.converted + " "
+            pendingWord = nil
+        }
+        output += composingBuffer
+        composingBuffer = ""
+        if !output.isEmpty {
+            client.insertText(output,
+                              replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
     }
 
     /// Commit raw Latin text without any conversion.

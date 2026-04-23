@@ -7,3 +7,4 @@ DerivedData/
 *.moved-aside
 *.xcuserstate
 proof_of_concept.py
+LangAutoSwitcher-v*.zip

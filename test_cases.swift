@@ -120,6 +120,7 @@ let wordTests: [(String, String, String)] = [
     ("prewkl\\`wam", "превключвам", "to switch (with \\ → ю)"),
     ("~ajnika", "Чайника", "the kettle (uppercase Ч via ~)"),
     ("po-skoro", "по-скоро", "sooner (hyphenated BG word)"),
+    ("nakraq.", "накрая.", "at the end + trailing dot (punctuation preserved)"),
     ("po-dobre", "по-добре", "better (hyphenated BG word)"),
     ("razhod", "разход", "expense (r-a-z-h-o-d, no digraphs)"),
     ("|nikod", "Юникод", "unicode (uppercase Ю via |)"),
@@ -128,7 +129,23 @@ let wordTests: [(String, String, String)] = [
 print("\n📋 WORD MAPPING TESTS")
 print("=" * 50)
 for (latin, expectedCyrillic, meaning) in wordTests {
-    let result = PhoneticMapper.toCyrillic(latin)
+    // Strip trailing punctuation like the app does, convert, reattach
+    let trailingPunct: Set<Character> = [".", ",", "!", "?"]
+    var cleanLatin = latin
+    var trailingStr = ""
+    while let last = cleanLatin.last, trailingPunct.contains(last) {
+        trailingStr = String(last) + trailingStr
+        cleanLatin.removeLast()
+    }
+    // Handle hyphens: split, convert each part, rejoin
+    let result: String
+    if cleanLatin.contains("-") {
+        result = cleanLatin.split(separator: "-", omittingEmptySubsequences: false)
+            .map { PhoneticMapper.toCyrillic(String($0)) }
+            .joined(separator: "-") + trailingStr
+    } else {
+        result = PhoneticMapper.toCyrillic(cleanLatin) + trailingStr
+    }
     test("\(latin) → \(expectedCyrillic) (\(meaning))",
          result == expectedCyrillic,
          detail: "got '\(result)'")
@@ -467,6 +484,83 @@ for t in lookAheadTests {
          isAmbiguous && resolvedWord1 == t.expectedWord1Output && resolvedWord2 == t.expectedWord2Output,
          detail: "got '\(resolvedWord1) \(resolvedWord2)' (w1: EN=\(w1inEN) BG=\(w1inBG), w2: EN=\(w2inEN) BG=\(w2inBG))")
 }
+
+// ============================================================================
+// MARK: - 4b. Emoticon preservation
+// ============================================================================
+
+print("\n📋 EMOTICON PRESERVATION")
+print("=" * 50)
+
+// Mirror the emoticon logic in InputController: these must NOT be phonetically
+// converted. Two paths: (1) prefix+body force-commit path for non-letter bodies,
+// (2) fully-buffered known emoticons committed via space.
+
+let emoticonPrefixes: Set<String> = [":", ";", "=", ":-", ";-", "=-", ":'", ";'"]
+let emoticonBodyChars: Set<Character> = [")", "(", "*", "|"]
+let knownEmoticons: Set<String> = [
+    ":D", ":P", ":p", ":O", ":o", ":3", ":X", ":x",
+    ";D", ";P", ";p",
+    "=D", "=P", "=p",
+    ":-D", ":-P", ":-p", ":-O", ":-o", ":-3",
+    ";-D", ";-P", ";-p",
+    ":'D",
+    "xD", "XD", "xP", "XP",
+]
+
+// Force-commit path: buffer is an emoticon prefix and body char follows.
+let prefixBodyCases: [(String, Character, String)] = [
+    (":", ")", ":)"),
+    (":", "(", ":("),
+    (":", "*", ":*"),
+    (":", "|", ":|"),
+    (";", ")", ";)"),
+    (";", "(", ";("),
+    ("=", ")", "=)"),
+    ("=", "(", "=("),
+    (":-", ")", ":-)"),
+    (":-", "(", ":-("),
+    (":-", "*", ":-*"),
+    (";-", ")", ";-)"),
+    (":'", "(", ":'("),
+    (":'", ")", ":')"),
+]
+
+for (buffer, body, expected) in prefixBodyCases {
+    let isPrefix = emoticonPrefixes.contains(buffer)
+    let isBody = emoticonBodyChars.contains(body)
+    test("prefix+body '\(buffer)' + '\(body)' → '\(expected)' (raw)",
+         isPrefix && isBody,
+         detail: "isPrefix=\(isPrefix) isBody=\(isBody)")
+}
+
+// Fully-buffered emoticons committed via space.
+let bufferedEmoticons = [
+    ":D", ":P", ":O", ":o",
+    ";D", ";P",
+    "=D",
+    ":-D", ":-P", ":-O",
+    ";-D",
+    "xD", "XD",
+]
+for e in bufferedEmoticons {
+    test("buffered '\(e)' recognized as emoticon",
+         knownEmoticons.contains(e),
+         detail: "not in knownEmoticons")
+}
+
+// Sanity: regular words must NOT be treated as emoticons.
+let notEmoticons = ["towa", "kak", "hello", "proba", "word"]
+for w in notEmoticons {
+    test("'\(w)' is NOT an emoticon",
+         !knownEmoticons.contains(w))
+}
+
+// Regression: the specific bug the user reported — "Ж)" instead of ":)".
+// Before fix: ":" was phonetically mapped to "Ж" on force-commit.
+// After fix: ":" stays raw when followed by emoticon body, giving ":)".
+test("regression: ':' + ')' stays ':)' (was 'Ж)')",
+     emoticonPrefixes.contains(":") && emoticonBodyChars.contains(")"))
 
 // ============================================================================
 // MARK: - 5. Dictionary conflict analysis
