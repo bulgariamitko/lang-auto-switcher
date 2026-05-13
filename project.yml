@@ -38,14 +38,23 @@ targets:
         tsInputMethodIconFileKey: icon.tiff
         CFBundleIconFile: AppIcon
         TISIntendedLanguage: en
+    preBuildScripts:
+      - name: Build Rust core (langauto-core)
+        script: "\"${SRCROOT}/scripts/build_rust.sh\""
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dklaturov.inputmethod.LangAutoSwitcher
-        # Input methods must NOT be sandboxed
         ENABLE_APP_SANDBOX: false
-        # No main storyboard/xib — we run headless
         INFOPLIST_KEY_NSMainStoryboardFile: ""
-        # Link InputMethodKit
-        OTHER_LDFLAGS: ["-framework", "InputMethodKit"]
-        # Disable SwiftUI automatic @main detection since we use main.swift
-        SWIFT_OBJC_BRIDGING_HEADER: ""
+        # Link InputMethodKit + the Rust static library
+        OTHER_LDFLAGS:
+          - "-framework"
+          - "InputMethodKit"
+          - "-L$(SRCROOT)/langauto-core/target/universal/$(CONFIGURATION:lower)"
+          - "-llangauto_core"
+        # Swift sees the C ABI through this bridging header
+        SWIFT_OBJC_BRIDGING_HEADER: "LangAutoSwitcher/Sources/LangAutoSwitcher-Bridging-Header.h"
+        # So #import "langauto_core.h" resolves
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/langauto-core/include"

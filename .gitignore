@@ -8,3 +8,6 @@ DerivedData/
 *.xcuserstate
 proof_of_concept.py
 LangAutoSwitcher-v*.zip
+
+# Rust build artifacts (langauto-core)
+langauto-core/target/

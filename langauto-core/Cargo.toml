@@ -1,0 +1,22 @@
+[package]
+name = "langauto_core"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform core for LangAutoSwitcher: phonetic mapping, dictionaries, language detection flow"
+license = "MIT"
+
+[lib]
+name = "langauto_core"
+# staticlib: macOS Xcode links libcore.a
+# cdylib:    Linux/Windows shims load libcore.so / core.dll
+# rlib:      pure-Rust callers (tests, future Rust shims) can use it directly
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 1  # the edit-distance search is slow at opt-level 0

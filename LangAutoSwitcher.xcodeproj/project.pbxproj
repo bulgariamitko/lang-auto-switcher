@@ -13,7 +13,6 @@
 		4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB94C001B13C79D7434A128D /* LanguageDetector.swift */; };
 		591998EAC59E6129EFC61790 /* PhoneticMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */; };
 		804C4C1ECC7A380E361A836D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 070B2EE2E7D82277DB78B9E9 /* main.swift */; };
-		8C5DE0107EBE2F68FD4320FD /* AutoCorrector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7EA2C7F1A74C6D3B0454A5E /* AutoCorrector.swift */; };
 		BD913790EE7BFC5A725A25A1 /* InputController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D56C03557BAE5E2AA3504C /* InputController.swift */; };
 		EA185251BA11F29B1F166BC3 /* icon.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 77FE3DA9751D9E457E985245 /* icon.tiff */; };
 /* End PBXBuildFile section */
@@ -21,10 +20,10 @@
 /* Begin PBXFileReference section */
 		070B2EE2E7D82277DB78B9E9 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		078D9FBAE3CC36389ABED17B /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		3C5543EB8AB3E8771D92551F /* LangAutoSwitcher-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "LangAutoSwitcher-Bridging-Header.h"; sourceTree = "<group>"; };
 		77FE3DA9751D9E457E985245 /* icon.tiff */ = {isa = PBXFileReference; lastKnownFileType = image.tiff; path = icon.tiff; sourceTree = "<group>"; };
 		7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneticMapper.swift; sourceTree = "<group>"; };
 		AAB9C7E018C571ED406C2834 /* LangAutoSwitcher.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LangAutoSwitcher.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		B7EA2C7F1A74C6D3B0454A5E /* AutoCorrector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoCorrector.swift; sourceTree = "<group>"; };
 		BBD412EEC07513075222764E /* en-dictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "en-dictionary.txt"; sourceTree = "<group>"; };
 		C1D56C03557BAE5E2AA3504C /* InputController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputController.swift; sourceTree = "<group>"; };
 		D44632B8E68385BA16B32986 /* bg-dictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "bg-dictionary.txt"; sourceTree = "<group>"; };
@@ -55,8 +54,8 @@
 		5B92F40F2F7DBFB1FDBDEDAE /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				B7EA2C7F1A74C6D3B0454A5E /* AutoCorrector.swift */,
 				C1D56C03557BAE5E2AA3504C /* InputController.swift */,
+				3C5543EB8AB3E8771D92551F /* LangAutoSwitcher-Bridging-Header.h */,
 				DB94C001B13C79D7434A128D /* LanguageDetector.swift */,
 				070B2EE2E7D82277DB78B9E9 /* main.swift */,
 				7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */,
@@ -81,6 +80,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2513166D9CEF3A5398C7038E /* Build configuration list for PBXNativeTarget "LangAutoSwitcher" */;
 			buildPhases = (
+				3763A7A064F55C2A4C1372E6 /* Build Rust core (langauto-core) */,
 				C303DB0100804592647195B6 /* Sources */,
 				805DF9F2A30D0D651E97273F /* Resources */,
 			);
@@ -142,12 +142,33 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		3763A7A064F55C2A4C1372E6 /* Build Rust core (langauto-core) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust core (langauto-core)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/build_rust.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		C303DB0100804592647195B6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8C5DE0107EBE2F68FD4320FD /* AutoCorrector.swift in Sources */,
 				BD913790EE7BFC5A725A25A1 /* InputController.swift in Sources */,
 				4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */,
 				591998EAC59E6129EFC61790 /* PhoneticMapper.swift in Sources */,
@@ -228,6 +249,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/langauto-core/include",
+				);
 				INFOPLIST_FILE = LangAutoSwitcher/Resources/Info.plist;
 				INFOPLIST_KEY_NSMainStoryboardFile = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -237,10 +261,12 @@
 				OTHER_LDFLAGS = (
 					"-framework",
 					InputMethodKit,
+					"-L$(SRCROOT)/langauto-core/target/universal/$(CONFIGURATION:lower)",
+					"-llangauto_core",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.dklaturov.inputmethod.LangAutoSwitcher;
 				SDKROOT = macosx;
-				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = "LangAutoSwitcher/Sources/LangAutoSwitcher-Bridging-Header.h";
 			};
 			name = Release;
 		};
@@ -250,6 +276,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/langauto-core/include",
+				);
 				INFOPLIST_FILE = LangAutoSwitcher/Resources/Info.plist;
 				INFOPLIST_KEY_NSMainStoryboardFile = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -259,10 +288,12 @@
 				OTHER_LDFLAGS = (
 					"-framework",
 					InputMethodKit,
+					"-L$(SRCROOT)/langauto-core/target/universal/$(CONFIGURATION:lower)",
+					"-llangauto_core",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.dklaturov.inputmethod.LangAutoSwitcher;
 				SDKROOT = macosx;
-				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = "LangAutoSwitcher/Sources/LangAutoSwitcher-Bridging-Header.h";
 			};
 			name = Debug;
 		};
