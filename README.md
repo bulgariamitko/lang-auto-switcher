@@ -5,6 +5,14 @@
 
 Free, open source, native macOS Input Method. No accounts, no telemetry, no internet required.
 
+| Platform | Status |
+|---|---|
+| **macOS** | ✅ Ready — download and install below |
+| **Linux** (IBus) | 🚧 [Skeleton](langauto-linux/README.md) — Rust core works, input plumbing TODO. Contributors welcome. |
+| **Windows** | 🚧 [Skeleton](langauto-windows/README.md) — Rust core works, input plumbing TODO. Contributors welcome. |
+
+The phonetic mapping, dictionaries, language detection, and autocorrect all live in a shared Rust crate (`langauto-core`) — porting to a new OS only requires writing the input-method shim for that platform.
+
 ```
 You type:    napisah now kod and sent email to John
 You see:     написах нов код and sent email to John
@@ -121,24 +129,39 @@ The dictionaries ship bundled inside the app.
 
 ## Build from source
 
-Requires Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen):
+Requires Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen), and [Rust](https://rustup.rs):
 
 ```bash
 brew install xcodegen
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
 xcodegen generate
 xcodebuild -project LangAutoSwitcher.xcodeproj -target LangAutoSwitcher -configuration Release build
 bash install.sh
 ```
+
+The Xcode build automatically invokes `scripts/build_rust.sh` to compile the cross-platform `langauto-core` Rust crate as a universal static library.
 
 Then log out / log back in and add it from System Settings as above.
 
 ### Run tests
 
 ```bash
-swift test_cases.swift
+swift test_cases.swift     # 163 Swift integration tests
+cargo test                 # 23 Rust unit tests
 ```
 
-All 163 tests should pass.
+## Architecture
+
+```
+langauto-core/        Rust crate — phonetic, dictionaries, detection, autocorrect
+langauto-linux/       Linux IBus shim (skeleton)
+langauto-windows/     Windows shim (skeleton)
+LangAutoSwitcher/     macOS Swift app (links langauto-core as static library)
+```
+
+All shared logic lives in `langauto-core`. Each platform writes its own thin shim that links the core. See [langauto-core/README.md](langauto-core/) for the C ABI.
 
 ---
 
@@ -146,10 +169,10 @@ All 163 tests should pass.
 
 The architecture supports any Latin ↔ non-Latin language pair. To add one:
 
-1. Add mappings to `singleMap` in `LangAutoSwitcher/Sources/PhoneticMapper.swift`
+1. Add mappings to `map_char()` in `langauto-core/src/phonetic.rs`
 2. Drop a word list (one word per line, in the target script) into `LangAutoSwitcher/Resources/`
-3. Wire it up in `LangAutoSwitcher/Sources/LanguageDetector.swift`
-4. Add test cases to `test_cases.swift`
+3. Wire it up in `langauto-core/src/detector.rs`
+4. Add test cases to `test_cases.swift` and `langauto-core/src/*/tests`
 5. Open a PR
 
 Good candidates: **Russian**, **Ukrainian**, **Serbian** (other Cyrillic languages), **Greek**, **Georgian**, **Armenian**.

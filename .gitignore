@@ -9,5 +9,6 @@ DerivedData/
 proof_of_concept.py
 LangAutoSwitcher-v*.zip
 
-# Rust build artifacts (langauto-core)
+# Rust build artifacts
 langauto-core/target/
+target/

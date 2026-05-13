@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Cross-platform Rust core: must build and test on all three OSes.
+  rust-core:
+    name: rust-core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build core
+        run: cargo build -p langauto_core --release
+      - name: Test core
+        run: cargo test -p langauto_core
+
+  # Linux IBus shim (skeleton — builds on Linux runners).
+  linux-shim:
+    name: linux-shim
+    runs-on: ubuntu-latest
+    needs: rust-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Linux shim
+        run: cargo build -p langauto-linux --release
+      - name: Smoke run
+        run: cargo run -p langauto-linux
+
+  # Windows shim (skeleton — builds on Windows runners).
+  windows-shim:
+    name: windows-shim
+    runs-on: windows-latest
+    needs: rust-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Windows shim
+        run: cargo build -p langauto-windows --release
+      - name: Smoke run
+        run: cargo run -p langauto-windows
+
+  # macOS full app: builds the Swift app linking the Rust static lib.
+  macos-app:
+    name: macos-app
+    runs-on: macos-latest
+    needs: rust-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build LangAutoSwitcher.app
+        run: |
+          xcodebuild \
+            -project LangAutoSwitcher.xcodeproj \
+            -target LangAutoSwitcher \
+            -configuration Release \
+            -quiet build
+      - name: Verify Rust core linked
+        run: |
+          nm build/Release/LangAutoSwitcher.app/Contents/MacOS/LangAutoSwitcher \
+            | grep -c langauto \
+            | xargs -I {} sh -c 'test {} -gt 0 || (echo "Rust core not linked"; exit 1)'

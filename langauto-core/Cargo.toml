@@ -12,11 +12,4 @@ name = "langauto_core"
 # rlib:      pure-Rust callers (tests, future Rust shims) can use it directly
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[profile.release]
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
-
-[profile.dev]
-opt-level = 1  # the edit-distance search is slow at opt-level 0
+# Profile settings live at the workspace root (../Cargo.toml).

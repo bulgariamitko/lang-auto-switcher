@@ -1,0 +1,29 @@
+# Root workspace for LangAutoSwitcher.
+#
+# Members:
+#   langauto-core/    pure cross-platform logic (phonetic, dictionary, detection)
+#   langauto-linux/   IBus engine shim (SKELETON — input handling TODO)
+#   langauto-windows/ Windows text service shim (SKELETON — input handling TODO)
+
+[workspace]
+resolver = "2"
+members = [
+    "langauto-core",
+    "langauto-linux",
+    "langauto-windows",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/bulgariamitko/lang-auto-switcher"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 1

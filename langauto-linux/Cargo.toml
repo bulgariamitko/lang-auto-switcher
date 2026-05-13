@@ -1,0 +1,14 @@
+[package]
+name = "langauto-linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Linux IBus input method shim for LangAutoSwitcher (skeleton)"
+
+[dependencies]
+langauto_core = { path = "../langauto-core" }
+
+[[bin]]
+name = "langauto-linux"
+path = "src/main.rs"
