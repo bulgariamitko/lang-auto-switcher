@@ -1,78 +1,136 @@
 # LangAutoSwitcher
 
-A macOS Input Method that **automatically detects** which language you're typing and converts to the correct alphabet on the fly. No more forgetting to switch keyboards!
+> **Type English and Bulgarian on the same keyboard, without ever switching layouts.**
+> Just type — LangAutoSwitcher figures out which language you meant and converts it to the right alphabet as you go.
 
-Currently supports **English ↔ Bulgarian (Cyrillic)**, but designed to be extensible — you can add your own language pairs.
+Free, open source, native macOS Input Method. No accounts, no telemetry, no internet required.
+
+```
+You type:    napisah now kod and sent email to John
+You see:     написах нов код and sent email to John
+```
+
+That's the whole idea. No `Cmd+Space`. No mistyped passwords. No half-Cyrillic, half-Latin Facebook posts.
+
+---
+
+## Who is this for?
+
+Anyone who types in **both English and Bulgarian** every day and is tired of:
+
+- Forgetting to switch the keyboard before typing a password
+- Sending Facebook messages that start in one language and end in the other
+- Constantly hitting `Cmd+Space` mid-sentence
+- The standard БДС / Phonetic layout requiring you to *think* about which mode you're in
+
+LangAutoSwitcher just watches what you type and picks the right alphabet for each word. Your existing Cyrillic and English keyboards stay exactly as they are — this is one more option you can switch to from the menu bar 🌐 icon.
+
+---
 
 ## How it works
 
-1. You type on a single QWERTY keyboard
-2. As you type, letters appear underlined (composing state)
-3. When you press **space**, the word is analyzed:
-   - Checked against **234K English** and **234K Bulgarian** word dictionaries
-   - If ambiguous (exists in both), follows the previous word's language
-   - If the first word is ambiguous, waits for the second word to decide
-4. **Autocorrect**: `u` → `you`, `r` → `are`, plus spell correction for both languages
-5. Your native keyboards remain untouched — this is just one more input option
+1. You type normally on a regular QWERTY keyboard.
+2. Letters appear **underlined** while a word is being composed.
+3. The moment you press **space**, the word is checked against:
+   - a **234,000-word English dictionary**
+   - a **234,000-word Bulgarian dictionary** (phonetically transliterated)
+4. The winning language commits — either as-is (English) or converted to Cyrillic (Bulgarian).
+5. If a word exists in both languages, it follows the language of the previous word, so your "flow" is preserved.
+
+It auto-corrects common abbreviations too: `u` → `you`, `r` → `are`, plus edit-distance-1 spell correction for both languages.
 
 ### Examples
 
-| You type | Output | Why |
+| You type | What appears | What happened |
 |---|---|---|
-| `towa e samo proba` | това е само проба | Bulgarian words detected |
-| `hello how are you` | hello how are you | English words detected |
-| `napisah now kod want to write` | написах нов код want to write | Auto-switches at "want" |
-| `how r u` | how are you | English abbreviation expansion |
-| `kak si dobre` | как си добре | Bulgarian via transliteration |
+| `towa e samo proba` | това е само проба | All Bulgarian words → Cyrillic |
+| `hello how are you` | hello how are you | All English words → kept as-is |
+| `napisah now kod and want to write` | написах нов код and want to write | Auto-switched mid-sentence |
+| `how r u` | how are you | Abbreviation expanded |
+| `kak si` | как си | Bulgarian via transliteration |
+| `john@gmail.com` | john@gmail.com | Emails preserved |
 
-### Transliteration mapping
+---
 
-| Key | Cyrillic | Key | Cyrillic | Key | Cyrillic |
-|-----|----------|-----|----------|-----|----------|
-| `a` | а | `k` | к | `u` | у |
-| `b` | б | `l` | л | `v` | ж |
-| `c` | ц | `m` | м | `w` | в |
-| `d` | д | `n` | н | `x` | ь |
-| `e` | е | `o` | о | `y` | ъ |
-| `f` | ф | `p` | п | `z` | з |
-| `g` | г | `q` | я | `]` | щ |
-| `h` | х | `r` | р | `[` | ш |
-| `i` | и | `s` | с | `;` | ж |
-| `j` | й | `t` | т | `` ` `` | ч |
+## Install (60 seconds)
 
-**Digraphs:** `sh`→ш, `zh`→ж, `ch`→ч, `sht`→щ, `ts`→ц, `ya`→я, `yu`→ю
+**1. Download** the latest release:
+👉 [**Download LangAutoSwitcher-v2.6.0.zip**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
 
-## Install (pre-built)
+**2. Open Terminal** (⌘+Space → "Terminal") and paste:
 
-1. Download `LangAutoSwitcher.zip` from [Releases](../../releases/latest)
-2. Unzip and move to Input Methods:
-   ```bash
-   unzip LangAutoSwitcher.zip -d ~/Library/Input\ Methods/
-   ```
-3. Register the input method:
-   ```bash
-   swift -e 'import Carbon; TISRegisterInputSource(URL(fileURLWithPath: NSHomeDirectory() + "/Library/Input Methods/LangAutoSwitcher.app") as CFURL)'
-   ```
-4. **Log out and back in** (macOS needs this to discover new input methods)
-5. **System Settings → Keyboard → Input Sources → Edit...** → click **+** → find **LangAutoSwitcher**
-6. Switch to it from the input menu in your menu bar
+```bash
+cd ~/Downloads && unzip -o LangAutoSwitcher-v*.zip -d ~/Library/Input\ Methods/
+```
+
+**3. Log out and log back in.** (macOS only discovers new input methods at login — there is no way around this, sorry.)
+
+**4. Add it to your input sources:**
+- Open **System Settings → Keyboard → Input Sources → Edit…**
+- Click **+** in the bottom-left → search for **"LangAutoSwitcher"** → **Add**
+
+**5. Switch to it.** Click the 🌐 / flag icon in your menu bar and pick **LangAutoSwitcher**.
+
+Now just type. 🎉
+
+### Uninstall
+
+```bash
+rm -rf ~/Library/Input\ Methods/LangAutoSwitcher.app
+```
+Then log out / log back in.
+
+---
+
+## Transliteration mapping
+
+Every Latin key maps to exactly one Cyrillic letter (no digraphs to remember):
+
+| Key | → | Key | → | Key | → | Key | → |
+|---|---|---|---|---|---|---|---|
+| `a` | а | `i` | и | `q` | я | `y` | ъ |
+| `b` | б | `j` | й | `r` | р | `z` | з |
+| `c` | ц | `k` | к | `s` | с | `[` | ш |
+| `d` | д | `l` | л | `t` | т | `]` | щ |
+| `e` | е | `m` | м | `u` | у | `;` | ж |
+| `f` | ф | `n` | н | `v` | ж | `` ` `` | ч |
+| `g` | г | `o` | о | `w` | в | `\` | ю |
+| `h` | х | `p` | п | `x` | ь | `'` | ь |
+
+You almost never need to think about this table — most Bulgarian words are recognized by the dictionary directly from how you'd naturally spell them out (`zdravei`, `blagodarq`, `dobre`).
+
+---
+
+## Requirements
+
+- macOS 14.0 (Sonoma) or later
+- Apple Silicon or Intel Mac
+
+## Privacy
+
+LangAutoSwitcher runs entirely on your Mac. It does **not**:
+
+- send any text anywhere
+- connect to the internet
+- collect analytics or telemetry
+- log your keystrokes to disk
+
+The dictionaries ship bundled inside the app.
+
+---
 
 ## Build from source
 
-Requires Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+Requires Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen):
 
 ```bash
 brew install xcodegen
 xcodegen generate
 xcodebuild -project LangAutoSwitcher.xcodeproj -target LangAutoSwitcher -configuration Release build
-```
-
-### Install after building
-
-```bash
 bash install.sh
-# Then log out/in and add in System Settings → Keyboard → Input Sources
 ```
+
+Then log out / log back in and add it from System Settings as above.
 
 ### Run tests
 
@@ -80,76 +138,33 @@ bash install.sh
 swift test_cases.swift
 ```
 
+All 163 tests should pass.
+
+---
+
 ## Adding your own language
 
-The architecture is designed to support any Latin ↔ non-Latin language pair. To add a new language:
+The architecture supports any Latin ↔ non-Latin language pair. To add one:
 
-### 1. Create a character mapping
+1. Add mappings to `singleMap` in `LangAutoSwitcher/Sources/PhoneticMapper.swift`
+2. Drop a word list (one word per line, in the target script) into `LangAutoSwitcher/Resources/`
+3. Wire it up in `LangAutoSwitcher/Sources/LanguageDetector.swift`
+4. Add test cases to `test_cases.swift`
+5. Open a PR
 
-Edit `LangAutoSwitcher/Sources/PhoneticMapper.swift`:
-
-- Add your mappings to `singleMap` (single character → character)
-- Add digraphs to the `digraphs` array if your language has multi-character mappings (e.g., `sh` → `ш`)
-
-### 2. Add a word dictionary
-
-Create a text file with one word per line (in the target script, e.g., Cyrillic, Greek, etc.):
-
-```bash
-# Example: adding Greek
-# Create LangAutoSwitcher/Resources/el-dictionary.txt with Greek words
-```
-
-### 3. Update the detector
-
-In `LangAutoSwitcher/Sources/LanguageDetector.swift`:
-
-- Load your dictionary alongside the existing ones
-- Add dictionary checks in `processWord()`
-
-### 4. Add test cases
-
-Add scenarios to `test_cases.swift` to verify your language works correctly.
-
-### Example: languages that could be added
-
-- **Russian** (Cyrillic) — similar to Bulgarian, different phonetic mapping
-- **Greek** — Latin ↔ Greek alphabet
-- **Ukrainian** (Cyrillic) — similar to Bulgarian/Russian
-- **Serbian** (Cyrillic) — similar to Bulgarian
-- **Georgian** — Latin ↔ Georgian alphabet
-- **Armenian** — Latin ↔ Armenian alphabet
-
-## How detection works
-
-1. **Dictionary lookup** — the typed Latin word and its converted version are checked against 234K-word dictionaries for each language
-2. **Exclusive match** — if a word only exists in one language's dictionary, that language is used
-3. **Ambiguous match** — if a word exists in both, the previous word's language is followed (flow continuity)
-4. **First-word look-ahead** — if the first word is ambiguous, it waits for the second word to decide
-5. **Streak protection** — a strong streak (3+ confident words) in one language prevents short false matches from the other language from breaking the flow
-6. **Autocorrect** — abbreviation expansion and edit-distance-1 spell correction for both languages
-7. **Default preference** — configurable via the menu bar menu (click the input method icon)
-
-## Uninstall
-
-```bash
-rm -rf ~/Library/Input\ Methods/LangAutoSwitcher.app
-# Then log out/in or restart
-```
-
-## Requirements
-
-- macOS 14.0+ (Sonoma or later)
-- Apple Silicon or Intel Mac
+Good candidates: **Russian**, **Ukrainian**, **Serbian** (other Cyrillic languages), **Greek**, **Georgian**, **Armenian**.
 
 ## Contributing
 
-1. Fork the repo
-2. Add your language or fix a bug
-3. Add test cases to `test_cases.swift`
-4. Run `swift test_cases.swift` — all tests must pass
-5. Open a PR
+Pull requests welcome. For bug reports, please include:
+- macOS version
+- What you typed
+- What you expected vs. what appeared
 
 ## License
 
-MIT
+MIT — do whatever you want with it, including for commercial use.
+
+---
+
+If LangAutoSwitcher saves you time, star ⭐ the repo and share it — that's how other Bulgarian Mac users find it.
