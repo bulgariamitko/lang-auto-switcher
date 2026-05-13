@@ -24,7 +24,10 @@ if ! command -v cargo >/dev/null 2>&1; then
     exit 1
 fi
 
-cd "$CORE_DIR"
+# Build from the workspace root so cargo puts artifacts in the shared target/.
+# (Workspace members share <root>/target/ — they no longer have their own.)
+cd "$REPO_ROOT"
+TARGET_ROOT="$REPO_ROOT/target"
 
 PROFILE="${CONFIGURATION:-Release}"
 case "$PROFILE" in
@@ -33,18 +36,20 @@ case "$PROFILE" in
 esac
 
 echo "→ Building langauto-core ($PROFILE) for aarch64-apple-darwin"
-cargo build $CARGO_PROFILE_FLAG --target aarch64-apple-darwin
+cargo build $CARGO_PROFILE_FLAG -p langauto_core --target aarch64-apple-darwin
 
 echo "→ Building langauto-core ($PROFILE) for x86_64-apple-darwin"
-cargo build $CARGO_PROFILE_FLAG --target x86_64-apple-darwin
+cargo build $CARGO_PROFILE_FLAG -p langauto_core --target x86_64-apple-darwin
 
+# Universal binary still lands under langauto-core/ so the Xcode linker config
+# (which references langauto-core/target/universal/<config>) doesn't change.
 UNIVERSAL_DIR="$CORE_DIR/target/universal/$PROFILE_DIR"
 mkdir -p "$UNIVERSAL_DIR"
 
 echo "→ Lipo'ing into universal static library"
 lipo -create \
-    "$CORE_DIR/target/aarch64-apple-darwin/$PROFILE_DIR/liblangauto_core.a" \
-    "$CORE_DIR/target/x86_64-apple-darwin/$PROFILE_DIR/liblangauto_core.a" \
+    "$TARGET_ROOT/aarch64-apple-darwin/$PROFILE_DIR/liblangauto_core.a" \
+    "$TARGET_ROOT/x86_64-apple-darwin/$PROFILE_DIR/liblangauto_core.a" \
     -output "$UNIVERSAL_DIR/liblangauto_core.a"
 
 echo "✓ $UNIVERSAL_DIR/liblangauto_core.a"
