@@ -38,6 +38,13 @@ char* langauto_to_cyrillic(const char* text);
 int   langauto_is_latin_word(const char* text);
 int   langauto_contains_cyrillic(const char* text);
 
+// ---------- user keymap overrides ----------
+// `latin` and `cyrillic` are unicode scalar values. Override map is
+// process-wide; affects `langauto_to_cyrillic` and the detector's
+// internal Cyrillic comparisons.
+void langauto_set_char_override(uint32_t latin, uint32_t cyrillic);
+void langauto_clear_char_overrides(void);
+
 // ---------- detector lifecycle ----------
 // Both dictionaries are passed as newline-separated UTF-8 text.
 // Returns NULL on invalid input.

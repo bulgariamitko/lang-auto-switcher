@@ -33,5 +33,18 @@
                 type="application/octet-stream"
                 sparkle:edSignature="B2InUjiIxSZyMKxO38tyUAESdmZUEm7nKX7+4oE0FESzaQHdyocmaHHLNUhfG++5qQcgI3lMdaQXGBBBgQ/xDQ==" />
         </item>
+        <item>
+            <title>Version 2.7.5</title>
+            <pubDate>Fri, 15 May 2026 11:38:30 GMT</pubDate>
+            <sparkle:version>20705</sparkle:version>
+            <sparkle:shortVersionString>2.7.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://github.com/bulgariamitko/lang-auto-switcher/releases/tag/v2.7.5</sparkle:releaseNotesLink>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.5/LangAutoSwitcher-v2.7.5.zip"
+                length="3982865"
+                type="application/octet-stream"
+                sparkle:edSignature="A9SDRjTtRgmwRnkIMeXOT2PLsP19h/pFWK/H7n5K2qJUkvM5C3ElMeUiyH7aZWP5YI8IUUadvvZqri0oyapKCA==" />
+        </item>
     </channel>
 </rss>

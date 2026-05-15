@@ -82,6 +82,24 @@ pub unsafe extern "C" fn langauto_contains_cyrillic(text: *const c_char) -> c_in
 // ---------- detector handle + lifecycle ----------
 
 /// Opaque handle to a LanguageDetector instance.
+/// Install / clear a single Latin → Cyrillic override pair.
+///
+/// `latin` and `cyrillic` are unicode scalar values (UTF-32 code points).
+/// Pass scalar 0 (or anything outside the BMP without an override entry) only
+/// if you mean it. If `cyrillic` is 0 this is a no-op (we don't store NUL).
+#[no_mangle]
+pub extern "C" fn langauto_set_char_override(latin: u32, cyrillic: u32) {
+    if let (Some(l), Some(c)) = (char::from_u32(latin), char::from_u32(cyrillic)) {
+        if c != '\0' { phonetic::set_char_override(l, c); }
+    }
+}
+
+/// Drop all character overrides — `map_char` returns to the built-in mapping.
+#[no_mangle]
+pub extern "C" fn langauto_clear_char_overrides() {
+    phonetic::clear_char_overrides();
+}
+
 pub struct LangAutoDetector {
     inner: LanguageDetector,
 }

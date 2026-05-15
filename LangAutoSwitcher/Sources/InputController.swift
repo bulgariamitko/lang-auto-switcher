@@ -1,5 +1,6 @@
 import Cocoa
 import InputMethodKit
+import Sparkle
 
 /// The main input controller. Each text field the user focuses gets its own instance.
 /// It intercepts keystrokes, buffers the current word, and on space/punctuation
@@ -499,7 +500,48 @@ class InputController: IMKInputController {
         cyrillicItem.state = (currentDefault == .bulgarian) ? .on : .off
         menu.addItem(cyrillicItem)
 
+        menu.addItem(NSMenuItem.separator())
+
+        let editKeymapItem = NSMenuItem(title: "Edit Keymap…",
+                                        action: #selector(editKeymap),
+                                        keyEquivalent: "")
+        editKeymapItem.target = self
+        menu.addItem(editKeymapItem)
+
+        let reloadKeymapItem = NSMenuItem(title: "Reload Keymap",
+                                          action: #selector(reloadKeymap),
+                                          keyEquivalent: "")
+        reloadKeymapItem.target = self
+        menu.addItem(reloadKeymapItem)
+
+        let resetKeymapItem = NSMenuItem(title: "Reset Keymap to Defaults",
+                                         action: #selector(resetKeymap),
+                                         keyEquivalent: "")
+        resetKeymapItem.target = self
+        menu.addItem(resetKeymapItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let updateItem = NSMenuItem(title: "Check for Updates…",
+                                    action: #selector(checkForUpdates),
+                                    keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
+
         return menu
+    }
+
+    @objc private func editKeymap() {
+        // Open the JSON file in the user's default JSON handler (usually TextEdit).
+        NSWorkspace.shared.open(KeymapManager.fileURL)
+    }
+
+    @objc private func reloadKeymap() {
+        KeymapManager.loadAndApply()
+    }
+
+    @objc private func resetKeymap() {
+        KeymapManager.resetToDefaults()
     }
 
     @objc private func setDefaultEnglish() {
@@ -510,6 +552,12 @@ class InputController: IMKInputController {
     @objc private func setDefaultBulgarian() {
         detector.defaultLanguage = .bulgarian
         NSLog("LangAutoSwitcher: Default set to Bulgarian (Cyrillic)")
+    }
+
+    @objc private func checkForUpdates() {
+        // `updaterController` is the SPUStandardUpdaterController declared at
+        // top level in main.swift; visible to other files in the same module.
+        updaterController.checkForUpdates(nil)
     }
 
     // MARK: - Session lifecycle

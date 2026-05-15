@@ -13,6 +13,10 @@ guard let server = IMKServer(name: kConnectionName,
 }
 _ = server
 
+// Load the user's keymap.json (or create with defaults) and push any
+// overrides into the Rust core before any keystrokes arrive.
+KeymapManager.loadAndApply()
+
 // Sparkle auto-update.
 //
 // Input Method quirk: macOS owns our process lifecycle — when the user types

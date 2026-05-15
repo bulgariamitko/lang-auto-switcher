@@ -63,7 +63,7 @@ It auto-corrects common abbreviations too: `u` → `you`, `r` → `are`, plus ed
 ## Install (60 seconds)
 
 **1. Download** the latest release:
-👉 [**Download LangAutoSwitcher-v2.7.4.zip**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
+👉 [**Download LangAutoSwitcher-v2.7.5.zip**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
 
 **2. Open Terminal** (⌘+Space → "Terminal") and paste:
 
@@ -108,6 +108,10 @@ Every Latin key maps to exactly one Cyrillic letter (no digraphs to remember):
 | `h` | х | `p` | п | `x` | ь | `'` | ь |
 
 You almost never need to think about this table — most Bulgarian words are recognized by the dictionary directly from how you'd naturally spell them out (`zdravei`, `blagodarq`, `dobre`).
+
+### Customizing the keymap
+
+Don't like the default mapping? Click the 🌐 menu → **LangAutoSwitcher** → **Edit Keymap…** to open `~/Library/Application Support/LangAutoSwitcher/keymap.json` in your editor. Change any pair (for example remap `v` to `в` instead of `ж`), save the file, then pick **Reload Keymap** from the same menu — your overrides apply immediately. **Reset Keymap to Defaults** restores everything.
 
 ---
 

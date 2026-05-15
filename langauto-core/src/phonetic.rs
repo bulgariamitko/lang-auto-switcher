@@ -1,11 +1,53 @@
 //! Phonetic Latin → Cyrillic mapping (strict 1-to-1, no digraphs).
 //!
 //! Ported from PhoneticMapper.swift. Behavior must match exactly.
+//!
+//! User overrides:
+//!   The host platform can install a per-char override map via
+//!   `set_char_override`. When set, `map_char` consults it first before
+//!   falling through to the built-in default.
+
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+// Single, process-wide override map. Empty = use built-in defaults only.
+// Mutex::new is const since Rust 1.63, no need for OnceCell/lazy_static.
+static OVERRIDES: Mutex<Option<HashMap<char, char>>> = Mutex::new(None);
+
+/// Replace the per-char override map. Pass an empty map to clear overrides.
+pub fn set_char_overrides(map: HashMap<char, char>) {
+    if let Ok(mut g) = OVERRIDES.lock() {
+        *g = if map.is_empty() { None } else { Some(map) };
+    }
+}
+
+/// Add or replace a single override entry. Lighter-weight than building a
+/// full HashMap on the caller side when streaming pairs across FFI.
+pub fn set_char_override(latin: char, cyrillic: char) {
+    if let Ok(mut g) = OVERRIDES.lock() {
+        g.get_or_insert_with(HashMap::new).insert(latin, cyrillic);
+    }
+}
+
+/// Drop all overrides — `map_char` returns to the built-in mapping.
+pub fn clear_char_overrides() {
+    if let Ok(mut g) = OVERRIDES.lock() { *g = None; }
+}
 
 /// Map a single Latin char (plus a few punctuation keys) to its Cyrillic counterpart.
 /// Returns `None` if the char has no mapping — callers should keep the original char.
 #[inline]
 pub fn map_char(c: char) -> Option<char> {
+    if let Ok(g) = OVERRIDES.lock() {
+        if let Some(map) = g.as_ref() {
+            if let Some(&out) = map.get(&c) { return Some(out); }
+        }
+    }
+    default_map_char(c)
+}
+
+#[inline]
+fn default_map_char(c: char) -> Option<char> {
     let mapped = match c {
         // lowercase letters
         'a' => 'а', 'b' => 'б', 'c' => 'ц', 'd' => 'д', 'e' => 'е',
@@ -102,6 +144,22 @@ mod tests {
         assert!(!is_latin_word("hello1"));
         assert!(!is_latin_word("здравей"));
         assert!(!is_latin_word("hello world"));
+    }
+
+    #[test]
+    fn user_override_replaces_default_mapping() {
+        // Default: 'v' → 'ж'. Override to 'в' (phonetic-sound mapping).
+        // After clearing, the default returns.
+        clear_char_overrides();
+        assert_eq!(to_cyrillic("v"), "ж");
+
+        set_char_override('v', 'в');
+        assert_eq!(to_cyrillic("v"), "в");
+        // Other chars still use default.
+        assert_eq!(to_cyrillic("a"), "а");
+
+        clear_char_overrides();
+        assert_eq!(to_cyrillic("v"), "ж");
     }
 
     #[test]
