@@ -1,5 +1,6 @@
 import Cocoa
 import InputMethodKit
+import Sparkle
 
 // The connection name must match Info.plist → InputMethodConnectionName
 let kConnectionName = "LangAutoSwitcher_Connection"
@@ -10,11 +11,31 @@ guard let server = IMKServer(name: kConnectionName,
     NSLog("LangAutoSwitcher: Failed to create IMKServer")
     exit(1)
 }
-
-// Keep a strong reference
 _ = server
 
-NSLog("LangAutoSwitcher: Input Method started successfully")
+// Sparkle auto-update.
+//
+// Input Method quirk: macOS owns our process lifecycle — when the user types
+// it spawns/respawns us. Sparkle's default flow quits the app, replaces the
+// .app bundle, and tries to relaunch. The quit + replace work fine, but the
+// relaunch attempt is ignored by macOS for input methods. That's intentional:
+// the next keystroke spawns the new bundle automatically.
+final class UpdateDelegate: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        // Explicit feed URL so SUFeedURL in Info.plist isn't strictly required
+        // for testing; keeps the source of truth visible.
+        return "https://bulgariamitko.github.io/lang-auto-switcher/appcast.xml"
+    }
+}
+let updateDelegate = UpdateDelegate()
+let updaterController = SPUStandardUpdaterController(
+    startingUpdater: true,
+    updaterDelegate: updateDelegate,
+    userDriverDelegate: updateDelegate
+)
+_ = updaterController
+
+NSLog("LangAutoSwitcher: Input Method started successfully (v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"))")
 
 // Run the app event loop
 NSApplication.shared.run()

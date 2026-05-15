@@ -19,9 +19,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>InputMethodConnectionName</key>
 	<string>LangAutoSwitcher_Connection</string>
 	<key>InputMethodServerControllerClass</key>
@@ -30,6 +30,14 @@
 	<true/>
 	<key>LSUIElement</key>
 	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://bulgariamitko.github.io/lang-auto-switcher/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>hqwuql1C6NLqHU8XUQAX8ZXJxuA3byj9DIl0hnf2Xhg=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 	<key>TISIntendedLanguage</key>
 	<string>en</string>
 	<key>tsInputMethodCharacterRepertoireKey</key>

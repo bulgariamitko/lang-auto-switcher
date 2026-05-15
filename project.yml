@@ -9,11 +9,22 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: ""
+    # Default version — overridden per-release by scripts/release.sh via
+    # MARKETING_VERSION=… CURRENT_PROJECT_VERSION=… on the xcodebuild line.
+    MARKETING_VERSION: "2.7.3"
+    CURRENT_PROJECT_VERSION: "2073"
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.9.0"
 
 targets:
   LangAutoSwitcher:
     type: application
     platform: macOS
+    dependencies:
+      - package: Sparkle
     sources:
       - path: LangAutoSwitcher/Sources
       - path: LangAutoSwitcher/Resources/bg-dictionary.txt
@@ -28,6 +39,8 @@ targets:
       path: LangAutoSwitcher/Resources/Info.plist
       properties:
         CFBundleDisplayName: LangAutoSwitcher
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSBackgroundOnly: true
         LSUIElement: true
         InputMethodConnectionName: LangAutoSwitcher_Connection
@@ -38,6 +51,14 @@ targets:
         tsInputMethodIconFileKey: icon.tiff
         CFBundleIconFile: AppIcon
         TISIntendedLanguage: en
+        # Sparkle auto-update configuration. Public key only — the matching
+        # private key lives in the developer's macOS Keychain and never ships.
+        SUFeedURL: https://bulgariamitko.github.io/lang-auto-switcher/appcast.xml
+        SUPublicEDKey: hqwuql1C6NLqHU8XUQAX8ZXJxuA3byj9DIl0hnf2Xhg=
+        # 24h between background update checks (in seconds)
+        SUScheduledCheckInterval: 86400
+        # Let user opt in/out on first run; default to enabled
+        SUEnableAutomaticChecks: true
     preBuildScripts:
       - name: Build Rust core (langauto-core)
         script: "\"${SRCROOT}/scripts/build_rust.sh\""

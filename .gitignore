@@ -12,3 +12,5 @@ LangAutoSwitcher-v*.zip
 # Rust build artifacts
 langauto-core/target/
 target/
+.claude/
+LangAutoSwitcher.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/

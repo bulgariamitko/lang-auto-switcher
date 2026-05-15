@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>LangAutoSwitcher Updates</title>
+        <link>https://bulgariamitko.github.io/lang-auto-switcher/appcast.xml</link>
+        <description>Automatic updates for LangAutoSwitcher.</description>
+        <language>en</language>
+        <!-- Releases are listed newest-first. The release script appends new
+             entries above the closing </channel> tag. -->
+        <item>
+            <title>Version 2.7.3</title>
+            <pubDate>Fri, 15 May 2026 11:22:42 GMT</pubDate>
+            <sparkle:version>20703</sparkle:version>
+            <sparkle:shortVersionString>2.7.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://github.com/bulgariamitko/lang-auto-switcher/releases/tag/v2.7.3</sparkle:releaseNotesLink>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.3/LangAutoSwitcher-v2.7.3.zip"
+                length="3963378"
+                type="application/octet-stream"
+                sparkle:edSignature="l1DbagKX1rejpG3TnaegJCuDdURfEsxgi6tQYFE+X3hZX7yeRuDne5jAg3ys62EC+jcWJWlcd4idYT3DAkkzDw==" />
+        </item>
+    </channel>
+</rss>

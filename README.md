@@ -3,7 +3,7 @@
 > **Type English and Bulgarian on the same keyboard, without ever switching layouts.**
 > Just type — LangAutoSwitcher figures out which language you meant and converts it to the right alphabet as you go.
 
-Free, open source, native macOS Input Method. No accounts, no telemetry, no internet required.
+Free, open source, native macOS Input Method. No accounts, no telemetry. The only network traffic is a daily check for new versions (can be disabled in the Sparkle update preferences).
 
 | Platform | Status |
 |---|---|
@@ -63,7 +63,7 @@ It auto-corrects common abbreviations too: `u` → `you`, `r` → `are`, plus ed
 ## Install (60 seconds)
 
 **1. Download** the latest release:
-👉 [**Download LangAutoSwitcher-v2.7.2.zip**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
+👉 [**Download LangAutoSwitcher-v2.7.3.zip**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
 
 **2. Open Terminal** (⌘+Space → "Terminal") and paste:
 
@@ -119,11 +119,12 @@ You almost never need to think about this table — most Bulgarian words are rec
 LangAutoSwitcher runs entirely on your Mac. It does **not**:
 
 - send any text anywhere
-- connect to the internet
 - collect analytics or telemetry
 - log your keystrokes to disk
 
 The dictionaries ship bundled inside the app.
+
+The **only** network connection the app makes is a daily HTTPS request to its appcast (`https://bulgariamitko.github.io/lang-auto-switcher/appcast.xml`) to see whether a new version is available — handled by the open-source [Sparkle](https://sparkle-project.org) framework. You can disable update checks at any time in the Sparkle prompt that appears on the first launch.
 
 ---
 
