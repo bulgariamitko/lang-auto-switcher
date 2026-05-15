@@ -1,0 +1,32 @@
+<style>
+  /* Use system colors so the text follows the dialog's light/dark theme. */
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  /* Fallback for renderers that don't know the -apple-system colors. */
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
+</style>
+
+<h2>v2.7.14 — Какво е новото</h2>
+
+<h3>Текстът в този диалог вече се вижда и в двете теми</h3>
+<p>В предишните версии CSS-ът беше с фиксиран тъмен цвят за текста,
+така че в тъмна тема всичко изчезваше. Сега използваме системните
+цветове на macOS — четим е и в светла, и в тъмна тема.</p>
+
+<h3>Иконата е още по-тъмна за по-добра видимост</h3>
+<p>Подсилих контраста на AppIcon-а — фонът сега е почти черен с бели
+букви „Аб". Така иконата изглежда последователно навсякъде, в това
+число и в този диалог.</p>

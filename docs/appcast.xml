@@ -67,13 +67,24 @@
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <description><![CDATA[
 <style>
-  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
-  h2 { margin: 0 0 6px 0; font-size: 15px; }
-  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
   ul { margin: 4px 0 8px 18px; padding: 0; }
   li { margin: 2px 0; }
-  code { background: #f1f1f1; padding: 1px 4px; border-radius: 3px;
+  code { background: rgba(127,127,127,0.18); padding: 1px 4px; border-radius: 3px;
          font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
 </style>
 
 <h2>What's new in v2.7.7</h2>
@@ -105,11 +116,24 @@ offline.</p>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <description><![CDATA[
 <style>
-  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
-  h2 { margin: 0 0 6px 0; font-size: 15px; }
-  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
   ul { margin: 4px 0 8px 18px; padding: 0; }
   li { margin: 2px 0; }
+  code { background: rgba(127,127,127,0.18); padding: 1px 4px; border-radius: 3px;
+         font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
 </style>
 
 <h2>What's new in v2.7.8</h2>
@@ -143,11 +167,24 @@ to click.</p>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <description><![CDATA[
 <style>
-  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
-  h2 { margin: 0 0 6px 0; font-size: 15px; }
-  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
   ul { margin: 4px 0 8px 18px; padding: 0; }
   li { margin: 2px 0; }
+  code { background: rgba(127,127,127,0.18); padding: 1px 4px; border-radius: 3px;
+         font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
 </style>
 
 <h2>What's new in v2.7.9</h2>
@@ -174,11 +211,24 @@ LangAutoSwitcher itself is exactly the same as v2.7.8.)</p>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <description><![CDATA[
 <style>
-  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
-  h2 { margin: 0 0 6px 0; font-size: 15px; }
-  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
   ul { margin: 4px 0 8px 18px; padding: 0; }
   li { margin: 2px 0; }
+  code { background: rgba(127,127,127,0.18); padding: 1px 4px; border-radius: 3px;
+         font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
 </style>
 
 <h2>What's new in v2.7.10</h2>
@@ -204,11 +254,24 @@ colorful app icon.</p>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <description><![CDATA[
 <style>
-  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
-  h2 { margin: 0 0 6px 0; font-size: 15px; }
-  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
   ul { margin: 4px 0 8px 18px; padding: 0; }
   li { margin: 2px 0; }
+  code { background: rgba(127,127,127,0.18); padding: 1px 4px; border-radius: 3px;
+         font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
 </style>
 
 <h2>What's new in v2.7.11</h2>
@@ -235,9 +298,24 @@ colorful app icon.</p>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <description><![CDATA[
 <style>
-  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
-  h2 { margin: 0 0 6px 0; font-size: 15px; }
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
   ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  code { background: rgba(127,127,127,0.18); padding: 1px 4px; border-radius: 3px;
+         font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
 </style>
 
 <h2>v2.7.12 — Тъмна иконка</h2>
@@ -263,9 +341,24 @@ colorful app icon.</p>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <description><![CDATA[
 <style>
-  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
-  h2 { margin: 0 0 6px 0; font-size: 15px; }
-  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  code { background: rgba(127,127,127,0.18); padding: 1px 4px; border-radius: 3px;
+         font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
 </style>
 
 <h2>v2.7.13 — Какво е новото</h2>
@@ -285,6 +378,52 @@ colorful app icon.</p>
                 length="3854840"
                 type="application/octet-stream"
                 sparkle:edSignature="CGHlAp7LSYvxcpDs/RT8lYR570QriMNijpW1mlaDjHMSceiitcG0fhkHzPnRc6UBpsTmt/CjuzPMK/dr9rd9Bw==" />
+        </item>
+        <item>
+            <title>Version 2.7.14</title>
+            <pubDate>Fri, 15 May 2026 13:13:48 GMT</pubDate>
+            <sparkle:version>20714</sparkle:version>
+            <sparkle:shortVersionString>2.7.14</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  /* Use system colors so the text follows the dialog's light/dark theme. */
+  body {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: -apple-system-label;
+  }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  /* Fallback for renderers that don't know the -apple-system colors. */
+  @media (prefers-color-scheme: light) {
+    body, h2, h3 { color: #1d1d1f; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body, h2, h3 { color: #f5f5f7; }
+  }
+</style>
+
+<h2>v2.7.14 — Какво е новото</h2>
+
+<h3>Текстът в този диалог вече се вижда и в двете теми</h3>
+<p>В предишните версии CSS-ът беше с фиксиран тъмен цвят за текста,
+така че в тъмна тема всичко изчезваше. Сега използваме системните
+цветове на macOS — четим е и в светла, и в тъмна тема.</p>
+
+<h3>Иконата е още по-тъмна за по-добра видимост</h3>
+<p>Подсилих контраста на AppIcon-а — фонът сега е почти черен с бели
+букви „Аб". Така иконата изглежда последователно навсякъде, в това
+число и в този диалог.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.14/LangAutoSwitcher-v2.7.14.zip"
+                length="3854902"
+                type="application/octet-stream"
+                sparkle:edSignature="iYYzhjnAliwIcOYvuSddIH0vT3X2XZFTt4Z7cX959iSGVZTtJ+cz2Cc/i8ePMvQ3Oq2h+4gy5S1/BcHdN/68AA==" />
         </item>
     </channel>
 </rss>

@@ -63,7 +63,7 @@ LangAutoSwitcher просто следи какво пишеш и избира �
 ## Инсталация (60 секунди)
 
 **1. Изтегли** най-новата версия:
-👉 [**Изтегли LangAutoSwitcher-v2.7.13.dmg**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
+👉 [**Изтегли LangAutoSwitcher-v2.7.14.dmg**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
 
 **2. Отвори DMG-то** и **щракни двукратно върху иконата `Install LangAutoSwitcher`**. Малък диалог на български те води през инсталацията — без Terminal, без администраторска парола.
 
