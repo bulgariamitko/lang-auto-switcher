@@ -23,23 +23,24 @@ APPCAST = Path(__file__).resolve().parents[1] / "docs" / "appcast.xml"
 def build_entry(version, build_number, zip_url, length, ed_sig,
                 notes_url, notes_html):
     pub_date = formatdate(localtime=False, usegmt=True)
-    desc_block = ""
+    # Sparkle 2.x prefers releaseNotesLink over description when both are
+    # present (it loads the URL in a webview). To force the inline dialog,
+    # only emit the link as a fallback when there's no inline html.
     if notes_html:
-        # Strip an accidental nested CDATA close, then wrap in CDATA so any
-        # raw HTML (including <ul>, &amp;, etc.) is XML-safe.
         safe = notes_html.replace("]]>", "]]]]><![CDATA[>")
-        desc_block = (
+        notes_block = (
             "\n            <description><![CDATA[\n"
             f"{safe}\n"
             "            ]]></description>"
         )
+    else:
+        notes_block = f"\n            <sparkle:releaseNotesLink>{notes_url}</sparkle:releaseNotesLink>"
     return f"""        <item>
             <title>Version {version}</title>
             <pubDate>{pub_date}</pubDate>
             <sparkle:version>{build_number}</sparkle:version>
             <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>{notes_url}</sparkle:releaseNotesLink>{desc_block}
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>{notes_block}
             <enclosure
                 url="{zip_url}"
                 length="{length}"

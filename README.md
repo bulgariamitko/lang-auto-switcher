@@ -1,98 +1,98 @@
 # LangAutoSwitcher
 
-> **Type English and Bulgarian on the same keyboard, without ever switching layouts.**
-> Just type — LangAutoSwitcher figures out which language you meant and converts it to the right alphabet as you go.
+> **Пиши на български и английски от една и съща клавиатура, без никога да превключваш подредбата.**
+> Просто пиши — LangAutoSwitcher разбира на кой език си писал и автоматично конвертира към правилната азбука.
 
-Free, open source, native macOS Input Method. No accounts, no telemetry. The only network traffic is a daily check for new versions (can be disabled in the Sparkle update preferences).
+Безплатно, с отворен код, native macOS приложение за въвеждане. Без регистрации, без проследяване. Единствената мрежова връзка е дневна проверка за нова версия (която можеш да изключиш в настройките на Sparkle).
 
-| Platform | Status |
+| Платформа | Статус |
 |---|---|
-| **macOS** | ✅ Ready — download and install below |
-| **Linux** (IBus) | 🚧 [Skeleton](langauto-linux/README.md) — Rust core works, input plumbing TODO. Contributors welcome. |
-| **Windows** | 🚧 [Skeleton](langauto-windows/README.md) — Rust core works, input plumbing TODO. Contributors welcome. |
+| **macOS** | ✅ Готово — изтегли и инсталирай по-долу |
+| **Linux** (IBus) | 🚧 [Скица](langauto-linux/README.md) — Rust ядрото работи, остава IBus частта. Помощ е добре дошла. |
+| **Windows** | 🚧 [Скица](langauto-windows/README.md) — Rust ядрото работи, остава TSF частта. Помощ е добре дошла. |
 
-The phonetic mapping, dictionaries, language detection, and autocorrect all live in a shared Rust crate (`langauto-core`) — porting to a new OS only requires writing the input-method shim for that platform.
+Фонетичното съпоставяне, речниците, разпознаването на език и автокорекцията — всичко това живее в общ Rust пакет (`langauto-core`). За да портнеш към друга операционна система е достатъчно да напишеш тънкия input-method адаптер за нея.
 
 ```
-You type:    napisah now kod and sent email to John
-You see:     написах нов код and sent email to John
+Пишеш:        napisah now kod and sent email to John
+Виждаш:       написах нов код and sent email to John
 ```
 
-That's the whole idea. No `Cmd+Space`. No mistyped passwords. No half-Cyrillic, half-Latin Facebook posts.
+Това е цялата идея. Без `Cmd+Space`. Без сгрешени пароли. Без полу-кирилица, полу-латиница във Facebook постовете.
 
 ---
 
-## Who is this for?
+## За кого е?
 
-Anyone who types in **both English and Bulgarian** every day and is tired of:
+За всеки, който всеки ден пише на **български и английски** и му е писнало от:
 
-- Forgetting to switch the keyboard before typing a password
-- Sending Facebook messages that start in one language and end in the other
-- Constantly hitting `Cmd+Space` mid-sentence
-- The standard БДС / Phonetic layout requiring you to *think* about which mode you're in
+- Да забравя да превключи клавиатурата преди да напише парола
+- Да праща месинджър съобщения, които започват на единия език и свършват на другия
+- Постоянно да натиска `Cmd+Space` по средата на изречението
+- Стандартната БДС / Фонетична подредба, при която трябва да *мислиш* в кой режим си
 
-LangAutoSwitcher just watches what you type and picks the right alphabet for each word. Your existing Cyrillic and English keyboards stay exactly as they are — this is one more option you can switch to from the menu bar 🌐 icon.
+LangAutoSwitcher просто следи какво пишеш и избира правилната азбука за всяка дума. Кирилската и английската ти клавиатура си остават както са — това е просто още една опция, която можеш да избереш от 🌐 иконата в горната лента.
 
 ---
 
-## How it works
+## Как работи
 
-1. You type normally on a regular QWERTY keyboard.
-2. Letters appear **underlined** while a word is being composed.
-3. The moment you press **space**, the word is checked against:
-   - a **234,000-word English dictionary**
-   - a **234,000-word Bulgarian dictionary** (phonetically transliterated)
-4. The winning language commits — either as-is (English) or converted to Cyrillic (Bulgarian).
-5. If a word exists in both languages, it follows the language of the previous word, so your "flow" is preserved.
+1. Пишеш нормално на обикновена QWERTY клавиатура.
+2. Буквите се показват **подчертани**, докато се изписва думата.
+3. В момента, в който натиснеш **интервал**, думата се проверява срещу:
+   - **речник с 234 000 английски думи**
+   - **речник с 234 000 български думи** (фонетично транслитерирани)
+4. Печелившият език побеждава — или остава както е (английски), или се конвертира в кирилица (български).
+5. Ако думата съществува на двата езика, тя следва езика на предишната дума, така че „потокът" ти се запазва.
 
-It auto-corrects common abbreviations too: `u` → `you`, `r` → `are`, plus edit-distance-1 spell correction for both languages.
+Автоматично коригира и често срещани съкращения: `u` → `you`, `r` → `are`, плюс правописна корекция с разстояние 1 за двата езика.
 
-### Examples
+### Примери
 
-| You type | What appears | What happened |
+| Пишеш | Виждаш | Какво се случи |
 |---|---|---|
-| `towa e samo proba` | това е само проба | All Bulgarian words → Cyrillic |
-| `hello how are you` | hello how are you | All English words → kept as-is |
-| `napisah now kod and want to write` | написах нов код and want to write | Auto-switched mid-sentence |
-| `how r u` | how are you | Abbreviation expanded |
-| `kak si` | как си | Bulgarian via transliteration |
-| `john@gmail.com` | john@gmail.com | Emails preserved |
+| `towa e samo proba` | това е само проба | Всички думи са BG → Кирилица |
+| `hello how are you` | hello how are you | Всички думи са EN → остават |
+| `napisah now kod and want to write` | написах нов код and want to write | Автоматично превключване по средата |
+| `how r u` | how are you | Съкращението е разширено |
+| `kak si` | как си | Български през транслитерация |
+| `john@gmail.com` | john@gmail.com | Имейлите се запазват |
 
 ---
 
-## Install (60 seconds)
+## Инсталация (60 секунди)
 
-**1. Download** the latest release:
-👉 [**Download LangAutoSwitcher-v2.7.12.dmg**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
+**1. Изтегли** най-новата версия:
+👉 [**Изтегли LangAutoSwitcher-v2.7.13.dmg**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
 
-**2. Open the DMG**, then **double-click the `Install LangAutoSwitcher`** icon. A small Bulgarian-language dialog walks you through the install — no Terminal, no admin password.
+**2. Отвори DMG-то** и **щракни двукратно върху иконата `Install LangAutoSwitcher`**. Малък диалог на български те води през инсталацията — без Terminal, без администраторска парола.
 
-**3. Log out and log back in.** (macOS only discovers new input methods at login — there is no way around this, sorry.)
+**3. Излез от профила си и влез отново.** (macOS открива нови методи за въвеждане само при влизане — няма как да го заобиколим, съжаляваме.)
 
-**4. Add it to your input sources:**
-- Open **System Settings → Keyboard → Input Sources → Edit…**
-- Click **+** in the bottom-left → search for **"LangAutoSwitcher"** → **Add**
+**4. Добави го като източник на въвеждане:**
+- Отвори **Системни настройки → Клавиатура → Източници на въвеждане → Edit…**
+- Натисни **+** долу вляво → потърси **„LangAutoSwitcher"** → **Add**
 
-**5. Switch to it.** Click the 🌐 / flag icon in your menu bar and pick **LangAutoSwitcher**.
+**5. Превключи към него.** Натисни 🌐 / иконата на знаме в горната лента и избери **LangAutoSwitcher**.
 
-Now just type. 🎉
+Сега просто пиши. 🎉
 
-> **Updates after this**: LangAutoSwitcher checks once a day for a new version and pops up an "Install Update" dialog when one ships. You only have to do the manual install once.
+> **Следващите обновления**: LangAutoSwitcher проверява веднъж на ден за нова версия и показва диалог „Install Update", когато излезе такава. Ръчната инсталация е нужна само веднъж.
 
-### Uninstall
+### Деинсталиране
 
 ```bash
 rm -rf ~/Library/Input\ Methods/LangAutoSwitcher.app
 ```
-Then log out / log back in.
+След това излез / влез отново.
 
 ---
 
-## Transliteration mapping
+## Карта на транслитерацията
 
-Every Latin key maps to exactly one Cyrillic letter (no digraphs to remember):
+Всеки латински клавиш съответства на точно една кирилска буква (без диграфи за запомняне):
 
-| Key | → | Key | → | Key | → | Key | → |
+| Клавиш | → | Клавиш | → | Клавиш | → | Клавиш | → |
 |---|---|---|---|---|---|---|---|
 | `a` | а | `i` | и | `q` | я | `y` | ъ |
 | `b` | б | `j` | й | `r` | р | `z` | з |
@@ -103,36 +103,36 @@ Every Latin key maps to exactly one Cyrillic letter (no digraphs to remember):
 | `g` | г | `o` | о | `w` | в | `\` | ю |
 | `h` | х | `p` | п | `x` | ь | `'` | ь |
 
-You almost never need to think about this table — most Bulgarian words are recognized by the dictionary directly from how you'd naturally spell them out (`zdravei`, `blagodarq`, `dobre`).
+Почти никога няма да ти трябва тази таблица — повечето български думи се разпознават от речника директно от това, как естествено би ги напишеш (`zdravei`, `blagodarq`, `dobre`).
 
-### Customizing the keymap
+### Персонализиране на клавишите
 
-Don't like the default mapping? Click the 🌐 menu → **LangAutoSwitcher** → **Edit Keymap…** to open `~/Library/Application Support/LangAutoSwitcher/keymap.json` in your editor. Change any pair (for example remap `v` to `в` instead of `ж`), save the file, then pick **Reload Keymap** from the same menu — your overrides apply immediately. **Reset Keymap to Defaults** restores everything.
-
----
-
-## Requirements
-
-- macOS 14.0 (Sonoma) or later
-- Apple Silicon or Intel Mac
-
-## Privacy
-
-LangAutoSwitcher runs entirely on your Mac. It does **not**:
-
-- send any text anywhere
-- collect analytics or telemetry
-- log your keystrokes to disk
-
-The dictionaries ship bundled inside the app.
-
-The **only** network connection the app makes is a daily HTTPS request to its appcast (`https://bulgariamitko.github.io/lang-auto-switcher/appcast.xml`) to see whether a new version is available — handled by the open-source [Sparkle](https://sparkle-project.org) framework. You can disable update checks at any time in the Sparkle prompt that appears on the first launch.
+Не харесваш подразбраното съпоставяне? Натисни 🌐 менюто → **LangAutoSwitcher** → **Edit Keymap…**, за да отвориш `~/Library/Application Support/LangAutoSwitcher/keymap.json` в редактора си. Промени която и да е двойка (например смени `v` на `в` вместо `ж`), запази файла и избери **Reload Keymap** от същото меню — твоите промени се прилагат веднага. **Reset Keymap to Defaults** възстановява стандартните настройки.
 
 ---
 
-## Build from source
+## Изисквания
 
-Requires Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen), and [Rust](https://rustup.rs):
+- macOS 14.0 (Sonoma) или по-нов
+- Apple Silicon или Intel Mac
+
+## Поверителност
+
+LangAutoSwitcher работи изцяло на твоя Mac. Той **не**:
+
+- праща никакъв текст никъде
+- събира статистика или телеметрия
+- записва натисканията на клавиши на диска
+
+Речниците са вградени в самото приложение.
+
+**Единствената** мрежова връзка, която прави, е дневна HTTPS заявка към фийда си за обновления (`https://bulgariamitko.github.io/lang-auto-switcher/appcast.xml`), за да провери дали има нова версия — обработва се от отворената библиотека [Sparkle](https://sparkle-project.org). По всяко време можеш да изключиш проверките от диалога на Sparkle, който се показва при първото пускане.
+
+---
+
+## Компилиране от източника
+
+Изисква Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen) и [Rust](https://rustup.rs):
 
 ```bash
 brew install xcodegen
@@ -144,53 +144,53 @@ xcodebuild -project LangAutoSwitcher.xcodeproj -target LangAutoSwitcher -configu
 bash install.sh
 ```
 
-The Xcode build automatically invokes `scripts/build_rust.sh` to compile the cross-platform `langauto-core` Rust crate as a universal static library.
+Xcode buildът автоматично извиква `scripts/build_rust.sh`, за да компилира cross-platform `langauto-core` Rust пакета като универсална статична библиотека.
 
-Then log out / log back in and add it from System Settings as above.
+След това излез / влез отново и добави го от Системни настройки, както по-горе.
 
-### Run tests
+### Тестове
 
 ```bash
-swift test_cases.swift     # 163 Swift integration tests
-cargo test                 # 23 Rust unit tests
+swift test_cases.swift     # 163 Swift интеграционни теста
+cargo test                 # 25 Rust юнит теста
 ```
 
-## Architecture
+## Архитектура
 
 ```
-langauto-core/        Rust crate — phonetic, dictionaries, detection, autocorrect
-langauto-linux/       Linux IBus shim (skeleton)
-langauto-windows/     Windows shim (skeleton)
-LangAutoSwitcher/     macOS Swift app (links langauto-core as static library)
+langauto-core/        Rust пакет — фонетика, речници, разпознаване, автокорекция
+langauto-linux/       Linux IBus адаптер (скица)
+langauto-windows/     Windows адаптер (скица)
+LangAutoSwitcher/     macOS Swift приложение (свързва langauto-core като статична библиотека)
 ```
 
-All shared logic lives in `langauto-core`. Each platform writes its own thin shim that links the core. See [langauto-core/README.md](langauto-core/) for the C ABI.
+Цялата споделена логика живее в `langauto-core`. Всяка платформа пише свой тънък адаптер, който я свързва с ядрото. Виж [langauto-core/README.md](langauto-core/) за C ABI-то.
 
 ---
 
-## Adding your own language
+## Добавяне на свой език
 
-The architecture supports any Latin ↔ non-Latin language pair. To add one:
+Архитектурата поддържа всяка двойка „латиница ↔ нелатиница". За да добавиш нов:
 
-1. Add mappings to `map_char()` in `langauto-core/src/phonetic.rs`
-2. Drop a word list (one word per line, in the target script) into `LangAutoSwitcher/Resources/`
-3. Wire it up in `langauto-core/src/detector.rs`
-4. Add test cases to `test_cases.swift` and `langauto-core/src/*/tests`
-5. Open a PR
+1. Добави съпоставяне в `map_char()` от `langauto-core/src/phonetic.rs`
+2. Сложи списък с думи (по една на ред, в целевата азбука) в `LangAutoSwitcher/Resources/`
+3. Свържи го в `langauto-core/src/detector.rs`
+4. Добави тестове в `test_cases.swift` и `langauto-core/src/*/tests`
+5. Отвори PR
 
-Good candidates: **Russian**, **Ukrainian**, **Serbian** (other Cyrillic languages), **Greek**, **Georgian**, **Armenian**.
+Добри кандидати: **руски**, **украински**, **сръбски** (други кирилски езици), **гръцки**, **грузински**, **арменски**.
 
-## Contributing
+## Допринасяне
 
-Pull requests welcome. For bug reports, please include:
-- macOS version
-- What you typed
-- What you expected vs. what appeared
+Pull request-и са добре дошли. За доклади за бъгове, моля включи:
+- Версия на macOS
+- Какво си написал
+- Какво си очаквал спрямо какво се появи
 
-## License
+## Лиценз
 
-MIT — do whatever you want with it, including for commercial use.
+MIT — прави с него каквото искаш, включително за комерсиална употреба.
 
 ---
 
-If LangAutoSwitcher saves you time, star ⭐ the repo and share it — that's how other Bulgarian Mac users find it.
+Ако LangAutoSwitcher ти спестява време, добави ⭐ на repo-то и го сподели — така другите българи с Mac го намират.
