@@ -169,5 +169,36 @@ LangAutoSwitcher itself is exactly the same as v2.7.8.)</p>
                 type="application/octet-stream"
                 sparkle:edSignature="EKLDz+/kjg60fcHHAOeoOMdGl078XF4bSGQSq27olPIehM2zkI3RBzbRcmp1R9BCy4+sSxlGi6/Ns1Kq8GQrBA==" />
         </item>
+        <item>
+            <title>Version 2.7.10</title>
+            <pubDate>Fri, 15 May 2026 12:42:10 GMT</pubDate>
+            <sparkle:version>20710</sparkle:version>
+            <sparkle:shortVersionString>2.7.10</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://github.com/bulgariamitko/lang-auto-switcher/releases/tag/v2.7.10</sparkle:releaseNotesLink>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+</style>
+
+<h2>What's new in v2.7.10</h2>
+
+<h3>App icon now matches the system input-source style</h3>
+<p>When adding LangAutoSwitcher from System Settings → Keyboard → Input
+Sources, the icon now blends in with the rest of the input methods
+(grey rounded tile with dark "Аб" text), instead of standing out as a
+colorful app icon.</p>
+<p>The menu-bar template icon is unchanged.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.10/LangAutoSwitcher-v2.7.10.zip"
+                length="3856190"
+                type="application/octet-stream"
+                sparkle:edSignature="DSBVAAK9RgW2o8QfjSdwxN3SS4XUJQJl88kQqMlHW+lYBWN9S/QUV3wJIiI1aVfnI1NRGO9yVN3q1XYL6rT2Aw==" />
+        </item>
     </channel>
 </rss>

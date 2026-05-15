@@ -63,9 +63,9 @@ It auto-corrects common abbreviations too: `u` → `you`, `r` → `are`, plus ed
 ## Install (60 seconds)
 
 **1. Download** the latest release:
-👉 [**Download LangAutoSwitcher-v2.7.9.dmg**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
+👉 [**Download LangAutoSwitcher-v2.7.10.dmg**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
 
-**2. Open the DMG**, then **double-click `Install.command`**. A small Terminal window opens, copies the app into place, and shows you the next steps.
+**2. Open the DMG**, then **double-click the `Install LangAutoSwitcher`** icon. A small Bulgarian-language dialog walks you through the install — no Terminal, no admin password.
 
 **3. Log out and log back in.** (macOS only discovers new input methods at login — there is no way around this, sorry.)
 
