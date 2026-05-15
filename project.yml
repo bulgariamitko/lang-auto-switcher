@@ -35,6 +35,10 @@ targets:
         buildPhase: resources
       - path: LangAutoSwitcher/Resources/AppIcon.icns
         buildPhase: resources
+      # Asset catalog with light + dark AppIcon variants. Xcode compiles this
+      # into Assets.car alongside the legacy .icns; CFBundleIconName picks it.
+      - path: LangAutoSwitcher/Resources/Assets.xcassets
+        buildPhase: resources
     info:
       path: LangAutoSwitcher/Resources/Info.plist
       properties:
@@ -50,6 +54,9 @@ targets:
           - Cyrl
         tsInputMethodIconFileKey: icon.tiff
         CFBundleIconFile: AppIcon
+        # macOS 11+ honors CFBundleIconName from an asset catalog; this gives
+        # us light/dark theme support that a static .icns can't provide.
+        CFBundleIconName: AppIcon
         TISIntendedLanguage: en
         # Sparkle auto-update configuration. Public key only — the matching
         # private key lives in the developer's macOS Keychain and never ships.
@@ -67,6 +74,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dklaturov.inputmethod.LangAutoSwitcher
         ENABLE_APP_SANDBOX: false
+        # Tell actool which asset is our app icon (for the asset-catalog flow).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_NSMainStoryboardFile: ""
         # Link InputMethodKit + the Rust static library
         OTHER_LDFLAGS:

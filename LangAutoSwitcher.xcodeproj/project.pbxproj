@@ -14,6 +14,7 @@
 		45782BF79B9DE568456A78CF /* KeymapManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCF1358F94DFACA75A6C8D7 /* KeymapManager.swift */; };
 		4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB94C001B13C79D7434A128D /* LanguageDetector.swift */; };
 		591998EAC59E6129EFC61790 /* PhoneticMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */; };
+		6BDA531A24470DFB13B599EE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20FB57EB42156A2F1E27966 /* Assets.xcassets */; };
 		804C4C1ECC7A380E361A836D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 070B2EE2E7D82277DB78B9E9 /* main.swift */; };
 		BD913790EE7BFC5A725A25A1 /* InputController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D56C03557BAE5E2AA3504C /* InputController.swift */; };
 		EA185251BA11F29B1F166BC3 /* icon.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 77FE3DA9751D9E457E985245 /* icon.tiff */; };
@@ -26,6 +27,7 @@
 		3C5543EB8AB3E8771D92551F /* LangAutoSwitcher-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "LangAutoSwitcher-Bridging-Header.h"; sourceTree = "<group>"; };
 		77FE3DA9751D9E457E985245 /* icon.tiff */ = {isa = PBXFileReference; lastKnownFileType = image.tiff; path = icon.tiff; sourceTree = "<group>"; };
 		7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneticMapper.swift; sourceTree = "<group>"; };
+		A20FB57EB42156A2F1E27966 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AAB9C7E018C571ED406C2834 /* LangAutoSwitcher.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LangAutoSwitcher.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBD412EEC07513075222764E /* en-dictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "en-dictionary.txt"; sourceTree = "<group>"; };
 		C1D56C03557BAE5E2AA3504C /* InputController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputController.swift; sourceTree = "<group>"; };
@@ -57,6 +59,7 @@
 			isa = PBXGroup;
 			children = (
 				078D9FBAE3CC36389ABED17B /* AppIcon.icns */,
+				A20FB57EB42156A2F1E27966 /* Assets.xcassets */,
 				D44632B8E68385BA16B32986 /* bg-dictionary.txt */,
 				BBD412EEC07513075222764E /* en-dictionary.txt */,
 				77FE3DA9751D9E457E985245 /* icon.tiff */,
@@ -154,6 +157,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3BAFB95DAAE8114AFD54368D /* AppIcon.icns in Resources */,
+				6BDA531A24470DFB13B599EE /* Assets.xcassets in Resources */,
 				347C0A8A694FDEB4BF1A74E2 /* bg-dictionary.txt in Resources */,
 				3803168B1B2A05F9E52C559E /* en-dictionary.txt in Resources */,
 				EA185251BA11F29B1F166BC3 /* icon.tiff in Resources */,
