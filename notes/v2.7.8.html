@@ -1,0 +1,24 @@
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+</style>
+
+<h2>What's new in v2.7.8</h2>
+
+<h3>Cleaner DMG installer</h3>
+<p>The DMG used to show two icons (the app and a Terminal script), which
+was confusing. It now shows a single labeled icon — double-click
+<b>Install LangAutoSwitcher</b> and a regular macOS dialog walks you
+through the install. No Terminal window, no ambiguity about which icon
+to click.</p>
+
+<h3>Under the hood</h3>
+<ul>
+  <li>The installer is now a small AppleScript-based .app embedded in the DMG,
+      signed and notarized like the input method itself.</li>
+  <li>The actual LangAutoSwitcher.app is bundled inside the installer's
+      Resources so users only see one thing in the DMG window.</li>
+</ul>

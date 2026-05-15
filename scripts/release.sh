@@ -155,7 +155,46 @@ ls -lh "$FINAL_ZIP"
 # Build the user-facing .dmg installer
 # -----------------------------------------------------------------------------
 echo ""
-echo "▸ Building DMG installer"
+echo "▸ Building installer .app (AppleScript applet)"
+INSTALLER_NAME="Install LangAutoSwitcher.app"
+INSTALLER_APP="$TMP_BUILD/$INSTALLER_NAME"
+osacompile -o "$INSTALLER_APP" "$REPO_ROOT/scripts/install_applet.applescript"
+
+# Embed the stapled LangAutoSwitcher.app inside the installer's Resources.
+cp -R "$APP_PATH" "$INSTALLER_APP/Contents/Resources/"
+
+# Give the installer the Аб app icon (so the user sees a familiar icon in the
+# DMG window, not the generic AppleScript scroll icon).
+cp "$REPO_ROOT/LangAutoSwitcher/Resources/AppIcon.icns" \
+   "$INSTALLER_APP/Contents/Resources/applet.icns"
+
+# Bump the installer's bundle id + version so its signature is distinct from
+# the inner app. (Optional, but keeps logs cleaner.)
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.dklaturov.inputmethod.LangAutoSwitcher.Installer" \
+    "$INSTALLER_APP/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
+    "$INSTALLER_APP/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" \
+    "$INSTALLER_APP/Contents/Info.plist" 2>/dev/null || true
+
+# Sign only the installer's outer bundle. The nested LangAutoSwitcher.app
+# keeps its own pre-stapled signature; we don't pass --deep so codesign
+# doesn't try to re-sign and break it.
+echo "    signing installer"
+codesign --force --options runtime --timestamp \
+    --sign "$IDENTITY" "$INSTALLER_APP"
+
+echo "▸ Submitting installer .app to notary service"
+INSTALLER_NOTARIZE_ZIP="$TMP_BUILD/installer_for_notary.zip"
+ditto -c -k --keepParent "$INSTALLER_APP" "$INSTALLER_NOTARIZE_ZIP"
+xcrun notarytool submit "$INSTALLER_NOTARIZE_ZIP" \
+    --keychain-profile "$NOTARY_PROFILE" --wait
+
+echo "    stapling installer"
+xcrun stapler staple "$INSTALLER_APP"
+
+echo ""
+echo "▸ Building DMG with the installer"
 DMG_NAME="LangAutoSwitcher-v${VERSION}.dmg"
 DMG_PATH="$TMP_BUILD/$DMG_NAME"
 FINAL_DMG="$REPO_ROOT/$DMG_NAME"
@@ -164,11 +203,8 @@ DMG_VOLNAME="LangAutoSwitcher ${VERSION}"
 rm -rf "$DMG_STAGE" "$FINAL_DMG"
 mkdir -p "$DMG_STAGE"
 
-# Use the already-stapled .app — DMG inherits both signature and notarization
-cp -R "$APP_PATH" "$DMG_STAGE/"
-# Per-user install script
-cp "$REPO_ROOT/scripts/dmg_install.command.template" "$DMG_STAGE/Install.command"
-chmod +x "$DMG_STAGE/Install.command"
+# Only the installer .app is visible in the DMG — no second confusing icon.
+cp -R "$INSTALLER_APP" "$DMG_STAGE/"
 
 echo "    creating writable image"
 TMP_DMG="$TMP_BUILD/temp.dmg"
@@ -191,12 +227,11 @@ tell application "Finder"
         set current view of container window to icon view
         set toolbar visible of container window to false
         set statusbar visible of container window to false
-        set bounds of container window to {400, 100, 900, 380}
+        set bounds of container window to {400, 100, 800, 360}
         set theViewOptions to icon view options of container window
         set arrangement of theViewOptions to not arranged
-        set icon size of theViewOptions to 96
-        set position of item "LangAutoSwitcher.app" of container window to {120, 130}
-        set position of item "Install.command" of container window to {380, 130}
+        set icon size of theViewOptions to 128
+        set position of item "$INSTALLER_NAME" of container window to {200, 110}
         update without registering applications
         delay 1
         close

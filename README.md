@@ -63,7 +63,7 @@ It auto-corrects common abbreviations too: `u` → `you`, `r` → `are`, plus ed
 ## Install (60 seconds)
 
 **1. Download** the latest release:
-👉 [**Download LangAutoSwitcher-v2.7.7.dmg**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
+👉 [**Download LangAutoSwitcher-v2.7.8.dmg**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
 
 **2. Open the DMG**, then **double-click `Install.command`**. A small Terminal window opens, copies the app into place, and shows you the next steps.
 
