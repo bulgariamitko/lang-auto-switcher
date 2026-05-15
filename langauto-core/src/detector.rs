@@ -441,6 +441,31 @@ mod tests {
     }
 
     #[test]
+    fn bg_short_function_word_at_sentence_start_does_not_lock_english() {
+        // Regression: sentences like "ama to za po-golemi…" used to stay
+        // Latin for the first 4 words because "ama"/"za"/"po"/"da" leaked
+        // into the English dictionary as Scrabble entries, defaulting the
+        // first-word resolve_ambiguous() to English and dragging the rest
+        // along in EN flow until a clearly-BG-only word forced a flip.
+        //
+        // With those Scrabble entries removed from en-dictionary.txt, the
+        // first BG-only word should commit BG and the rest follow.
+        let en: HashSet<String> = ["to"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["ама", "то", "за", "по", "големи", "бройки", "не"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        for (word, expected) in [
+            ("ama", "ама"), ("to", "то"), ("za", "за"), ("po", "по"),
+            ("golemi", "големи"), ("brojki", "бройки"), ("ne", "не"),
+        ] {
+            let r = d.process_word(word);
+            assert_eq!(r.language, DetectedLanguage::Bulgarian,
+                "word {word:?} should be Bulgarian, got {:?}", r.language);
+            assert_eq!(r.converted, expected, "word {word:?}: wrong conversion");
+        }
+    }
+
+    #[test]
     fn reset_context_clears_state() {
         let mut d = LanguageDetector::new(english_dict(), bulgarian_dict());
         d.process_word("hello");
