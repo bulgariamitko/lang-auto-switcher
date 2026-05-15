@@ -425,5 +425,38 @@ colorful app icon.</p>
                 type="application/octet-stream"
                 sparkle:edSignature="iYYzhjnAliwIcOYvuSddIH0vT3X2XZFTt4Z7cX959iSGVZTtJ+cz2Cc/i8ePMvQ3Oq2h+4gy5S1/BcHdN/68AA==" />
         </item>
+        <item>
+            <title>Version 2.7.15</title>
+            <pubDate>Fri, 15 May 2026 13:19:25 GMT</pubDate>
+            <sparkle:version>20715</sparkle:version>
+            <sparkle:shortVersionString>2.7.15</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  @media (prefers-color-scheme: light) { body, h2 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2 { color: #f5f5f7; } }
+</style>
+
+<h2>v2.7.15 — Синя иконка + автоматични обновления</h2>
+<ul>
+  <li>Иконата вече е синя със бели букви „Аб" — точно както изглежда
+      в горната лента, когато LangAutoSwitcher е активният източник.</li>
+  <li>Sparkle вече инсталира новите версии автоматично, без да трябва
+      да натискаш нищо. Това е последният път, в който виждаш този
+      диалог.</li>
+  <li>Проверката за нова версия е сведена до веднъж на час
+      (вместо веднъж на ден).</li>
+</ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.15/LangAutoSwitcher-v2.7.15.zip"
+                length="3848445"
+                type="application/octet-stream"
+                sparkle:edSignature="a/gAoDTgvEuZofLrL+z3BjceUPnzF0fKJo2Tal/8F5F/MuaNCvEGn3rVucA/+OSw0fFW/ZWdnjQC6eusKiDjAg==" />
+        </item>
     </channel>
 </rss>

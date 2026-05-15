@@ -62,10 +62,12 @@ targets:
         # private key lives in the developer's macOS Keychain and never ships.
         SUFeedURL: https://bulgariamitko.github.io/lang-auto-switcher/appcast.xml
         SUPublicEDKey: hqwuql1C6NLqHU8XUQAX8ZXJxuA3byj9DIl0hnf2Xhg=
-        # 24h between background update checks (in seconds)
-        SUScheduledCheckInterval: 86400
-        # Let user opt in/out on first run; default to enabled
+        # Check every hour instead of once a day.
+        SUScheduledCheckInterval: 3600
         SUEnableAutomaticChecks: true
+        # Download AND install updates automatically in the background.
+        # User no longer sees the "A new version is available" dialog.
+        SUAutomaticallyUpdate: true
     preBuildScripts:
       - name: Build Rust core (langauto-core)
         script: "\"${SRCROOT}/scripts/build_rust.sh\""
