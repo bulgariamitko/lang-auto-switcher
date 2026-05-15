@@ -1,0 +1,39 @@
+#!/bin/bash
+# Per-user installer for LangAutoSwitcher.
+# Copies the .app into ~/Library/Input Methods/ — no admin required.
+set -e
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+mkdir -p "$HOME/Library/Input Methods"
+killall LangAutoSwitcher 2>/dev/null || true
+rm -rf "$HOME/Library/Input Methods/LangAutoSwitcher.app"
+cp -R "$HERE/LangAutoSwitcher.app" "$HOME/Library/Input Methods/"
+
+clear
+cat <<'BANNER'
+
+  ╭───────────────────────────────────────────────────────────╮
+  │  ✓ LangAutoSwitcher installed                             │
+  ╰───────────────────────────────────────────────────────────╯
+
+  One-time setup:
+
+    1. Log out and log back in
+       (macOS only discovers new input methods at login)
+
+    2. Open System Settings →
+       Keyboard → Input Sources → Edit…
+
+    3. Click the + button → search for 'LangAutoSwitcher' → Add
+
+    4. Click 🌐 in your menu bar and pick LangAutoSwitcher
+
+  All future updates will install automatically — you only need
+  to do this once.
+
+BANNER
+read -n 1 -s -p "Press any key to close this window…"
+echo
+osascript -e 'tell application "Terminal" to close (every window whose name contains "Install")' &
+exit 0

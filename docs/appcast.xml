@@ -46,5 +46,18 @@
                 type="application/octet-stream"
                 sparkle:edSignature="A9SDRjTtRgmwRnkIMeXOT2PLsP19h/pFWK/H7n5K2qJUkvM5C3ElMeUiyH7aZWP5YI8IUUadvvZqri0oyapKCA==" />
         </item>
+        <item>
+            <title>Version 2.7.6</title>
+            <pubDate>Fri, 15 May 2026 11:55:28 GMT</pubDate>
+            <sparkle:version>20706</sparkle:version>
+            <sparkle:shortVersionString>2.7.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://github.com/bulgariamitko/lang-auto-switcher/releases/tag/v2.7.6</sparkle:releaseNotesLink>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.6/LangAutoSwitcher-v2.7.6.zip"
+                length="3982878"
+                type="application/octet-stream"
+                sparkle:edSignature="bPwEgHk86ex2LjUz4I1soWIOZd2Oh2jZIMTCMMzyNi/SAxpyutYFSa/3vUiuJgf2Vs0r6yB6yvQuNT8arzoUCQ==" />
+        </item>
     </channel>
 </rss>

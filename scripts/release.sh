@@ -141,6 +141,86 @@ python3 "$REPO_ROOT/scripts/append_appcast.py" "$VERSION" "$BUILD_NUMBER" \
     "$FINAL_ZIP" "$ED_SIG" "$NOTES_URL"
 
 ls -lh "$FINAL_ZIP"
+
+# -----------------------------------------------------------------------------
+# Build the user-facing .dmg installer
+# -----------------------------------------------------------------------------
 echo ""
-echo "✓ Release ready: $FINAL_ZIP"
+echo "▸ Building DMG installer"
+DMG_NAME="LangAutoSwitcher-v${VERSION}.dmg"
+DMG_PATH="$TMP_BUILD/$DMG_NAME"
+FINAL_DMG="$REPO_ROOT/$DMG_NAME"
+DMG_STAGE="$TMP_BUILD/dmg_stage"
+DMG_VOLNAME="LangAutoSwitcher ${VERSION}"
+rm -rf "$DMG_STAGE" "$FINAL_DMG"
+mkdir -p "$DMG_STAGE"
+
+# Use the already-stapled .app — DMG inherits both signature and notarization
+cp -R "$APP_PATH" "$DMG_STAGE/"
+# Per-user install script
+cp "$REPO_ROOT/scripts/dmg_install.command.template" "$DMG_STAGE/Install.command"
+chmod +x "$DMG_STAGE/Install.command"
+
+echo "    creating writable image"
+TMP_DMG="$TMP_BUILD/temp.dmg"
+hdiutil create -srcfolder "$DMG_STAGE" \
+    -volname "$DMG_VOLNAME" \
+    -fs HFS+ -fsargs "-c c=64,a=16,e=16" \
+    -format UDRW -size 20m "$TMP_DMG" >/dev/null
+
+echo "    mounting + arranging window"
+# Mount points may contain spaces — parse the tab-separated last field of the
+# attach output rather than splitting on whitespace.
+MOUNT_DIR=$(hdiutil attach -readwrite -noverify -noautoopen "$TMP_DMG" | \
+    tail -1 | awk -F'\t' '{print $NF}' | sed 's/[[:space:]]*$//')
+echo "    mounted at: $MOUNT_DIR"
+sleep 1
+osascript <<APPLESCRIPT
+tell application "Finder"
+    tell disk "$DMG_VOLNAME"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set bounds of container window to {400, 100, 900, 380}
+        set theViewOptions to icon view options of container window
+        set arrangement of theViewOptions to not arranged
+        set icon size of theViewOptions to 96
+        set position of item "LangAutoSwitcher.app" of container window to {120, 130}
+        set position of item "Install.command" of container window to {380, 130}
+        update without registering applications
+        delay 1
+        close
+    end tell
+end tell
+APPLESCRIPT
+
+sync
+# Retry detach — sometimes the AppleScript leaves a handle open briefly.
+for attempt in 1 2 3 4 5; do
+    if hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1; then break; fi
+    sleep 1
+    [ "$attempt" = "5" ] && hdiutil detach -force "$MOUNT_DIR" >/dev/null
+done
+
+echo "    compressing to read-only"
+hdiutil convert "$TMP_DMG" -format UDZO -imagekey zlib-level=9 \
+    -o "$DMG_PATH" >/dev/null
+
+echo "    signing DMG"
+codesign --force --sign "$IDENTITY" --timestamp "$DMG_PATH"
+
+echo "    submitting DMG to notary service"
+xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+
+echo "    stapling DMG"
+xcrun stapler staple "$DMG_PATH"
+
+cp "$DMG_PATH" "$FINAL_DMG"
+ls -lh "$FINAL_DMG"
+
+echo ""
+echo "✓ Release artifacts:"
+echo "    $FINAL_ZIP   (used by Sparkle for auto-update)"
+echo "    $FINAL_DMG   (user-facing first-install download)"
 echo "✓ docs/appcast.xml updated — commit + push so GitHub Pages serves it."
