@@ -63,7 +63,7 @@ It auto-corrects common abbreviations too: `u` → `you`, `r` → `are`, plus ed
 ## Install (60 seconds)
 
 **1. Download** the latest release:
-👉 [**Download LangAutoSwitcher-v2.7.1.zip**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
+👉 [**Download LangAutoSwitcher-v2.7.2.zip**](https://github.com/bulgariamitko/lang-auto-switcher/releases/latest)
 
 **2. Open Terminal** (⌘+Space → "Terminal") and paste:
 
