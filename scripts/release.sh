@@ -168,6 +168,12 @@ cp -R "$APP_PATH" "$INSTALLER_APP/Contents/Resources/"
 cp "$REPO_ROOT/LangAutoSwitcher/Resources/AppIcon.icns" \
    "$INSTALLER_APP/Contents/Resources/applet.icns"
 
+# osacompile also drops an Assets.car asset catalog that contains the default
+# scroll icon and overrides applet.icns at runtime in some places (notably
+# `display dialog`'s app-icon rendering). Remove it so applet.icns is the
+# sole source of truth.
+rm -f "$INSTALLER_APP/Contents/Resources/Assets.car"
+
 # Bump the installer's bundle id + version so its signature is distinct from
 # the inner app. (Optional, but keeps logs cleaner.)
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.dklaturov.inputmethod.LangAutoSwitcher.Installer" \
