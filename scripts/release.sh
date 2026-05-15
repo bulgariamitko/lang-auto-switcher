@@ -137,8 +137,17 @@ cp "$ZIP_PATH" "$FINAL_ZIP"
 
 echo "▸ Updating docs/appcast.xml"
 NOTES_URL="https://github.com/bulgariamitko/lang-auto-switcher/releases/tag/v${VERSION}"
-python3 "$REPO_ROOT/scripts/append_appcast.py" "$VERSION" "$BUILD_NUMBER" \
-    "$FINAL_ZIP" "$ED_SIG" "$NOTES_URL"
+# Optional per-release inline notes file. If notes/v<X.Y.Z>.html exists in the
+# repo, its HTML is embedded in the appcast <description> so Sparkle shows it
+# inline in the update dialog (no GitHub page fetch).
+NOTES_HTML="$REPO_ROOT/notes/v${VERSION}.html"
+if [ -f "$NOTES_HTML" ]; then
+    python3 "$REPO_ROOT/scripts/append_appcast.py" "$VERSION" "$BUILD_NUMBER" \
+        "$FINAL_ZIP" "$ED_SIG" "$NOTES_URL" "$NOTES_HTML"
+else
+    python3 "$REPO_ROOT/scripts/append_appcast.py" "$VERSION" "$BUILD_NUMBER" \
+        "$FINAL_ZIP" "$ED_SIG" "$NOTES_URL"
+fi
 
 ls -lh "$FINAL_ZIP"
 

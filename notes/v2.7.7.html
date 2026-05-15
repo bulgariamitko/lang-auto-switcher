@@ -1,0 +1,24 @@
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  code { background: #f1f1f1; padding: 1px 4px; border-radius: 3px;
+         font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+</style>
+
+<h2>What's new in v2.7.7</h2>
+
+<h3>Inline release notes</h3>
+<p>This update dialog now shows release notes directly, instead of opening
+the GitHub page in a webview. Smaller dialog, no extra round-trip, works
+offline.</p>
+
+<h3>Maintenance</h3>
+<ul>
+  <li>Each release writes a per-version <code>notes/vX.Y.Z.html</code>
+      file that's embedded into the appcast at build time.</li>
+  <li>No changes to the input-method behavior or keymap — same v2.7.6
+      detector and Sparkle wiring.</li>
+</ul>
