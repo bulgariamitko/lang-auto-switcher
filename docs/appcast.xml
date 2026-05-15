@@ -20,5 +20,18 @@
                 type="application/octet-stream"
                 sparkle:edSignature="l1DbagKX1rejpG3TnaegJCuDdURfEsxgi6tQYFE+X3hZX7yeRuDne5jAg3ys62EC+jcWJWlcd4idYT3DAkkzDw==" />
         </item>
+        <item>
+            <title>Version 2.7.4</title>
+            <pubDate>Fri, 15 May 2026 11:27:24 GMT</pubDate>
+            <sparkle:version>20704</sparkle:version>
+            <sparkle:shortVersionString>2.7.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://github.com/bulgariamitko/lang-auto-switcher/releases/tag/v2.7.4</sparkle:releaseNotesLink>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.4/LangAutoSwitcher-v2.7.4.zip"
+                length="3963404"
+                type="application/octet-stream"
+                sparkle:edSignature="B2InUjiIxSZyMKxO38tyUAESdmZUEm7nKX7+4oE0FESzaQHdyocmaHHLNUhfG++5qQcgI3lMdaQXGBBBgQ/xDQ==" />
+        </item>
     </channel>
 </rss>
