@@ -232,5 +232,34 @@ colorful app icon.</p>
                 type="application/octet-stream"
                 sparkle:edSignature="cld9zLOF504WceMFBegGaUTwYIbLpA+NXAKnMAO2pcO5vHbUGuhMaI4QR9mBGDoeOm93FpUrodBrrPJ40go3Ag==" />
         </item>
+        <item>
+            <title>Version 2.7.12</title>
+            <pubDate>Fri, 15 May 2026 12:58:40 GMT</pubDate>
+            <sparkle:version>20712</sparkle:version>
+            <sparkle:shortVersionString>2.7.12</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://github.com/bulgariamitko/lang-auto-switcher/releases/tag/v2.7.12</sparkle:releaseNotesLink>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+</style>
+
+<h2>v2.7.12 — Тъмна иконка</h2>
+<p>Иконата в Системни настройки → Клавиатура → Източници на въвеждане
+вече е тъмно сива с бяло „Аб", за да съвпада точно с ABC и БГ в тъмна
+тема (която повечето използват).</p>
+<p>В светла тема иконата остава тъмна — изглежда чисто и плоско, само
+с леко по-различен оттенък. macOS не позволява custom икони за входни
+методи да се променят според темата, така че трябваше да изберем един
+вариант, който се вписва най-добре.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.12/LangAutoSwitcher-v2.7.12.zip"
+                length="3854834"
+                type="application/octet-stream"
+                sparkle:edSignature="7UFhW1XJ2ehDygLAl1G8V5/PSRJGesZsMoNfWfWL9Egu4Nx9hDJgv+RgdMkSaP+nABKjG66T0iCxjo0rOTSiCA==" />
+        </item>
     </channel>
 </rss>
