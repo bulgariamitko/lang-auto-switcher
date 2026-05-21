@@ -53,6 +53,10 @@ pub struct LanguageDetector {
     pub score_english: Option<ScoreFn>,
     pub score_bulgarian: Option<ScoreFn>,
     pub default_language: DetectedLanguage,
+    /// When false, skip ALL autocorrect: abbreviation expansion (w→with, u→you,
+    /// mn→много…), NSSpellChecker corrections, and edit-distance-1 matching.
+    /// Words go through as typed (after phonetic conversion only).
+    pub autocorrect_enabled: bool,
 
     last_word_language: DetectedLanguage,
     recent_languages: Vec<DetectedLanguage>,
@@ -70,6 +74,7 @@ impl LanguageDetector {
             score_english: None,
             score_bulgarian: None,
             default_language: DetectedLanguage::English,
+            autocorrect_enabled: false,
             last_word_language: DetectedLanguage::Uncertain,
             recent_languages: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
             recent_confidences: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
@@ -101,30 +106,32 @@ impl LanguageDetector {
         let lower = word.to_lowercase();
 
         // 1. English abbreviation expansion (unless we're in a Bulgarian flow)
-        if let Some(expanded) = expand_english_abbreviation(&lower) {
-            if self.last_word_language != DetectedLanguage::Bulgarian {
-                self.push_context(DetectedLanguage::English, 1.0);
-                self.track_latin_word(word);
-                return WordResult {
-                    original: word.to_string(),
-                    converted: expanded.to_string(),
-                    language: DetectedLanguage::English,
-                    confidence: 1.0,
-                };
+        if self.autocorrect_enabled {
+            if let Some(expanded) = expand_english_abbreviation(&lower) {
+                if self.last_word_language != DetectedLanguage::Bulgarian {
+                    self.push_context(DetectedLanguage::English, 1.0);
+                    self.track_latin_word(word);
+                    return WordResult {
+                        original: word.to_string(),
+                        converted: expanded.to_string(),
+                        language: DetectedLanguage::English,
+                        confidence: 1.0,
+                    };
+                }
             }
-        }
 
-        // 2. Bulgarian abbreviation expansion (only in Bulgarian flow)
-        if let Some(bg_expanded) = expand_bulgarian_abbreviation(&lower) {
-            if self.last_word_language == DetectedLanguage::Bulgarian {
-                self.push_context(DetectedLanguage::Bulgarian, 1.0);
-                self.track_latin_word(word);
-                return WordResult {
-                    original: word.to_string(),
-                    converted: bg_expanded.to_string(),
-                    language: DetectedLanguage::Bulgarian,
-                    confidence: 1.0,
-                };
+            // 2. Bulgarian abbreviation expansion (only in Bulgarian flow)
+            if let Some(bg_expanded) = expand_bulgarian_abbreviation(&lower) {
+                if self.last_word_language == DetectedLanguage::Bulgarian {
+                    self.push_context(DetectedLanguage::Bulgarian, 1.0);
+                    self.track_latin_word(word);
+                    return WordResult {
+                        original: word.to_string(),
+                        converted: bg_expanded.to_string(),
+                        language: DetectedLanguage::Bulgarian,
+                        confidence: 1.0,
+                    };
+                }
             }
         }
 
@@ -176,7 +183,12 @@ impl LanguageDetector {
         } else {
             // In NEITHER dictionary — respect current flow first
             if self.last_word_language == DetectedLanguage::English && streak_len >= 2 {
-                if let Some(corrected) = correct_english(word, &self.en_dict, self.en_spell_check) {
+                let corrected = if self.autocorrect_enabled {
+                    correct_english(word, &self.en_dict, self.en_spell_check)
+                } else {
+                    None
+                };
+                if let Some(corrected) = corrected {
                     detected = DetectedLanguage::English;
                     output = corrected;
                     confidence = 0.8;
@@ -189,6 +201,11 @@ impl LanguageDetector {
                 detected = DetectedLanguage::Bulgarian;
                 output = cyrillic.clone();
                 confidence = 0.5;
+            } else if !self.autocorrect_enabled {
+                let r = self.resolve_unknown(word, &cyrillic);
+                detected = r.0;
+                output = r.1;
+                confidence = r.2;
             } else {
                 let en_spell = correct_english(word, &self.en_dict, self.en_spell_check);
                 let bg_spell = correct_bulgarian(&cyrillic, &self.bg_dict, self.bg_spell_check);
@@ -230,13 +247,15 @@ impl LanguageDetector {
         }
 
         // 4. Apply spell correction AFTER detection for high-confidence matches
-        if detected == DetectedLanguage::English && confidence >= 1.0 {
-            if let Some(corrected) = correct_english(&output, &self.en_dict, self.en_spell_check) {
-                output = corrected;
-            }
-        } else if detected == DetectedLanguage::Bulgarian && confidence >= 1.0 {
-            if let Some(corrected) = correct_bulgarian(&output, &self.bg_dict, self.bg_spell_check) {
-                output = corrected;
+        if self.autocorrect_enabled {
+            if detected == DetectedLanguage::English && confidence >= 1.0 {
+                if let Some(corrected) = correct_english(&output, &self.en_dict, self.en_spell_check) {
+                    output = corrected;
+                }
+            } else if detected == DetectedLanguage::Bulgarian && confidence >= 1.0 {
+                if let Some(corrected) = correct_bulgarian(&output, &self.bg_dict, self.bg_spell_check) {
+                    output = corrected;
+                }
             }
         }
 
@@ -435,9 +454,44 @@ mod tests {
     #[test]
     fn abbreviation_expansion_in_english_flow() {
         let mut d = LanguageDetector::new(english_dict(), bulgarian_dict());
+        d.autocorrect_enabled = true; // off by default
         let r = d.process_word("u");
         assert_eq!(r.converted, "you");
         assert_eq!(r.language, DetectedLanguage::English);
+    }
+
+    #[test]
+    fn autocorrect_off_by_default_leaves_abbreviations_alone() {
+        // The user opted out of "w → with"-style rewrites. With autocorrect
+        // disabled (the default), short Latin tokens must pass through as
+        // typed — no abbreviation expansion in either direction.
+        let mut d = LanguageDetector::new(english_dict(), bulgarian_dict());
+        assert!(!d.autocorrect_enabled, "autocorrect must default to off");
+
+        let r = d.process_word("w");
+        assert_eq!(r.converted, "w", "'w' should not expand to 'with'");
+        assert_ne!(r.converted, "with");
+
+        let r = d.process_word("u");
+        assert_eq!(r.converted, "u", "'u' should not expand to 'you'");
+    }
+
+    #[test]
+    fn autocorrect_off_skips_spell_check_fallback() {
+        // When the word is in NEITHER dictionary and autocorrect is off,
+        // the detector must not consult the spell-check callback — it
+        // should fall through to resolve_unknown() with the raw word.
+        let en: HashSet<String> = ["hello"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = HashSet::new();
+        let mut d = LanguageDetector::new(en, bg);
+        fn cb(_w: &str) -> Option<String> {
+            // If autocorrect path is taken, this would rewrite "helo" → "hello".
+            Some("hello".to_string())
+        }
+        d.en_spell_check = Some(cb);
+
+        let r = d.process_word("helo");
+        assert_eq!(r.converted, "helo", "autocorrect off must skip spell-check rewrite");
     }
 
     #[test]
@@ -463,6 +517,63 @@ mod tests {
                 "word {word:?} should be Bulgarian, got {:?}", r.language);
             assert_eq!(r.converted, expected, "word {word:?}: wrong conversion");
         }
+    }
+
+    #[test]
+    fn bg_sentence_starting_with_w_does_not_get_mangled_by_autocorrect() {
+        // Regression: with phonetic mapping `w → в`, the Bulgarian sentence
+        // "в момента го гледам но отнема време" is typed as
+        // "w momenta go gledam no otnema wreme". The previous build expanded
+        // the standalone "w" to "with" (English abbreviation table), which
+        // (a) committed an English word at the very start of a Bulgarian
+        // sentence and (b) locked the EN flow for the rest of it.
+        //
+        // With autocorrect off by default, "w" must transliterate to "в"
+        // and the whole sentence must come out Cyrillic.
+        let en: HashSet<String> = ["no"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = [
+            "в", "момента", "го", "гледам", "но", "отнема", "време",
+        ].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        let pairs = [
+            ("w",       "в"),
+            ("momenta", "момента"),
+            ("go",      "го"),
+            ("gledam",  "гледам"),
+            ("no",      "но"),
+            ("otnema",  "отнема"),
+            ("wreme",   "време"),
+        ];
+        let mut converted = Vec::new();
+        for (latin, expected_cyr) in pairs {
+            let r = d.process_word(latin);
+            assert_eq!(r.language, DetectedLanguage::Bulgarian,
+                "{latin:?} should land in Bulgarian, got {:?}", r.language);
+            assert_eq!(r.converted, expected_cyr,
+                "{latin:?}: expected {expected_cyr:?}, got {:?}", r.converted);
+            converted.push(r.converted);
+        }
+        assert_eq!(converted.join(" "),
+                   "в момента го гледам но отнема време");
+    }
+
+    #[test]
+    fn bg_sentence_starting_with_w_breaks_when_autocorrect_is_on() {
+        // Mirror of the test above — proves the autocorrect path is what
+        // caused the original bug. With autocorrect ON, the standalone "w"
+        // expands to "with" before phonetic conversion ever runs, so the
+        // first word is English and the sentence is corrupted.
+        let en: HashSet<String> = ["no", "with"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = [
+            "в", "момента", "го", "гледам", "но", "отнема", "време",
+        ].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.autocorrect_enabled = true;
+
+        let r = d.process_word("w");
+        assert_eq!(r.converted, "with",
+            "with autocorrect on, 'w' is expanded — this is the bug we turned off");
     }
 
     #[test]

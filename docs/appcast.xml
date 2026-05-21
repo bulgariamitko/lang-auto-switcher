@@ -458,5 +458,58 @@ colorful app icon.</p>
                 type="application/octet-stream"
                 sparkle:edSignature="a/gAoDTgvEuZofLrL+z3BjceUPnzF0fKJo2Tal/8F5F/MuaNCvEGn3rVucA/+OSw0fFW/ZWdnjQC6eusKiDjAg==" />
         </item>
+        <item>
+            <title>Version 2.7.16</title>
+            <pubDate>Thu, 21 May 2026 09:47:22 GMT</pubDate>
+            <sparkle:version>20716</sparkle:version>
+            <sparkle:shortVersionString>2.7.16</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+
+<h2>v2.7.16 — По-малко „полезни“ намеси</h2>
+
+<h3>Автокорекцията вече е изключена по подразбиране</h3>
+<p>До сега, когато започвахте на латиница изречение като
+„<b>w</b> momenta go gledam no otnema vreme“, единичното „w“ се
+превръщаше в „<b>with</b>“ заради вградения речник за съкращения
+(w → with, u → you, mn → много и др.). Това разваляше детекцията
+и цялото изречение оставаше на латиница вместо да премине на
+„в момента го гледам но отнема време“.</p>
+<p>Сега автокорекцията е <b>изключена</b> по подразбиране. Ако ти
+липсва, можеш да я върнеш от менюто на input source-а →
+„Автокорекция (w → with)“.</p>
+
+<h3>Изключване за конкретни приложения</h3>
+<p>Някои приложения (VNC клиенти при въвеждане на парола, custom
+форми с live-search на всеки клавиш, някои уеб полета в Chromium)
+не работят коректно с marked text композицията на macOS и
+произвеждат повторения от типа „lalanlanglangulanguageianguage“.</p>
+<p>Вече има начин те да се изключват едно по едно: отвори менюто
+докато си в проблемното приложение и избери
+„<b>Изключи за: &lt;bundle.id&gt;</b>“. От този момент нататък
+LangAutoSwitcher не прихваща клавиши там — просто получаваш
+суровите латински букви. Същият превключвател в менюто го
+включва отново.</p>
+<p>Списъкът се пази в
+<code>~/Library/Application Support/LangAutoSwitcher/excluded_apps.json</code>
+и може да се редактира на ръка през „Редактирай списъка с
+изключения…“.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.7.16/LangAutoSwitcher-v2.7.16.zip"
+                length="3870010"
+                type="application/octet-stream"
+                sparkle:edSignature="GMdvkxdygeFNP+97KZMCRaLz1hOlrg93iKkOPXovSvVfGa0NKbJZHrFah6k5o8/tyXUDXDM5UchGw3sfFSs+DQ==" />
+        </item>
     </channel>
 </rss>

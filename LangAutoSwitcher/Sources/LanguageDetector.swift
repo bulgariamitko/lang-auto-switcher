@@ -127,6 +127,7 @@ final class LanguageDetector {
 
     private let ptr: OpaquePointer
     private static let defaultLangKey = "LangAutoSwitcher_DefaultLanguage"
+    private static let autocorrectKey = "LangAutoSwitcher_AutocorrectEnabled"
 
     var defaultLanguage: DetectedLanguage {
         get {
@@ -135,6 +136,19 @@ final class LanguageDetector {
         set {
             langauto_detector_set_default_language(ptr, newValue.asInt)
             UserDefaults.standard.set(newValue.rawValue, forKey: Self.defaultLangKey)
+        }
+    }
+
+    /// Toggle for abbreviation expansion (w→with), spell-check suggestions,
+    /// and edit-distance-1 matching. Off by default — users explicitly asked
+    /// for raw transliteration without "helpful" rewrites.
+    var autocorrectEnabled: Bool {
+        get {
+            langauto_detector_get_autocorrect_enabled(ptr) == 1
+        }
+        set {
+            langauto_detector_set_autocorrect_enabled(ptr, newValue ? 1 : 0)
+            UserDefaults.standard.set(newValue, forKey: Self.autocorrectKey)
         }
     }
 
@@ -171,6 +185,13 @@ final class LanguageDetector {
         if let stored = UserDefaults.standard.string(forKey: Self.defaultLangKey),
            let lang = DetectedLanguage(rawValue: stored) {
             langauto_detector_set_default_language(self.ptr, lang.asInt)
+        }
+
+        // Restore persisted autocorrect preference (default: off).
+        // We only flip it on if the user explicitly enabled it before.
+        if UserDefaults.standard.object(forKey: Self.autocorrectKey) != nil {
+            let on = UserDefaults.standard.bool(forKey: Self.autocorrectKey)
+            langauto_detector_set_autocorrect_enabled(self.ptr, on ? 1 : 0)
         }
 
         NSLog("LangAutoSwitcher: initialized Rust core")

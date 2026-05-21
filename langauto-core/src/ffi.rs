@@ -285,6 +285,36 @@ pub unsafe extern "C" fn langauto_detector_get_default_language(
     lang_to_int((*d).inner.default_language)
 }
 
+/// Enable or disable all autocorrect behavior (abbreviation expansion, spell
+/// suggestions, edit-distance-1 matching). Off by default.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_set_autocorrect_enabled(
+    d: *mut LangAutoDetector,
+    enabled: c_int,
+) {
+    if d.is_null() {
+        return;
+    }
+    (*d).inner.autocorrect_enabled = enabled != 0;
+}
+
+/// 1 if autocorrect is currently enabled, 0 otherwise.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_get_autocorrect_enabled(
+    d: *mut LangAutoDetector,
+) -> c_int {
+    if d.is_null() {
+        return 0;
+    }
+    if (*d).inner.autocorrect_enabled { 1 } else { 0 }
+}
+
 // ---------- callback registration ----------
 //
 // Callbacks use C signatures the platform shim implements. They are stored as

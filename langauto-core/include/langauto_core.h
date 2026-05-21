@@ -69,6 +69,11 @@ int  langauto_detector_word_in_bg_dict(LangAutoDetector* d, const char* cyrillic
 void langauto_detector_set_default_language(LangAutoDetector* d, int lang);
 int  langauto_detector_get_default_language(LangAutoDetector* d);
 
+// Toggle autocorrect (abbreviation expansion + spell suggestions +
+// edit-distance-1 matching). Off by default for new detectors.
+void langauto_detector_set_autocorrect_enabled(LangAutoDetector* d, int enabled);
+int  langauto_detector_get_autocorrect_enabled(LangAutoDetector* d);
+
 // ---------- callback registration ----------
 // Pass NULL to clear an installed callback.
 void langauto_detector_set_en_spell_check(LangAutoDetector* d, LangAutoSpellCheckFn cb);

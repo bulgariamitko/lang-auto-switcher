@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0DC03FEA9E0ECEC309C88540 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 33F71A863AD65BF37AAAB6C6 /* Sparkle */; };
+		32E036EEBC49D52EF84A24E9 /* AppExclusionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1122FB65BC206D62DB355AA /* AppExclusionManager.swift */; };
 		347C0A8A694FDEB4BF1A74E2 /* bg-dictionary.txt in Resources */ = {isa = PBXBuildFile; fileRef = D44632B8E68385BA16B32986 /* bg-dictionary.txt */; };
 		3803168B1B2A05F9E52C559E /* en-dictionary.txt in Resources */ = {isa = PBXBuildFile; fileRef = BBD412EEC07513075222764E /* en-dictionary.txt */; };
 		3BAFB95DAAE8114AFD54368D /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 078D9FBAE3CC36389ABED17B /* AppIcon.icns */; };
@@ -33,6 +34,7 @@
 		C1D56C03557BAE5E2AA3504C /* InputController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputController.swift; sourceTree = "<group>"; };
 		D44632B8E68385BA16B32986 /* bg-dictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "bg-dictionary.txt"; sourceTree = "<group>"; };
 		DB94C001B13C79D7434A128D /* LanguageDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageDetector.swift; sourceTree = "<group>"; };
+		E1122FB65BC206D62DB355AA /* AppExclusionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppExclusionManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -71,6 +73,7 @@
 		5B92F40F2F7DBFB1FDBDEDAE /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				E1122FB65BC206D62DB355AA /* AppExclusionManager.swift */,
 				C1D56C03557BAE5E2AA3504C /* InputController.swift */,
 				1DCF1358F94DFACA75A6C8D7 /* KeymapManager.swift */,
 				3C5543EB8AB3E8771D92551F /* LangAutoSwitcher-Bridging-Header.h */,
@@ -193,6 +196,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				32E036EEBC49D52EF84A24E9 /* AppExclusionManager.swift in Sources */,
 				BD913790EE7BFC5A725A25A1 /* InputController.swift in Sources */,
 				45782BF79B9DE568456A78CF /* KeymapManager.swift in Sources */,
 				4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */,

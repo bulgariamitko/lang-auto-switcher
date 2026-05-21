@@ -29,6 +29,10 @@ class InputController: IMKInputController {
     /// Whether the current app is a terminal — if so, pass all keys through directly.
     private var isTerminalApp = false
 
+    /// Bundle ID of the currently focused app — needed by the menu so the
+    /// "Disable for [app]" item knows which bundle to flip.
+    private var currentBundleID: String? = nil
+
     /// Bundle IDs of known terminal/CLI apps where we should not intercept input.
     private static let terminalBundleIDs: Set<String> = [
         "com.apple.Terminal",
@@ -502,6 +506,45 @@ class InputController: IMKInputController {
 
         menu.addItem(NSMenuItem.separator())
 
+        let autocorrectItem = NSMenuItem(title: "Автокорекция (w → with)",
+                                         action: #selector(toggleAutocorrect),
+                                         keyEquivalent: "")
+        autocorrectItem.target = self
+        autocorrectItem.state = detector.autocorrectEnabled ? .on : .off
+        menu.addItem(autocorrectItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Per-app pass-through: lets the user disable interception in apps
+        // that mishandle IMK composition (live-search fields, VNC password
+        // boxes, Chromium omniboxes, etc.).
+        if let bundle = currentBundleID {
+            let excluded = AppExclusionManager.isExcluded(bundle)
+            let title = excluded
+                ? "Включи отново за: \(bundle)"
+                : "Изключи за: \(bundle)"
+            let appToggle = NSMenuItem(title: title,
+                                       action: #selector(toggleCurrentAppExclusion),
+                                       keyEquivalent: "")
+            appToggle.target = self
+            appToggle.state = excluded ? .on : .off
+            menu.addItem(appToggle)
+        }
+
+        let editExclusionsItem = NSMenuItem(title: "Редактирай списъка с изключения…",
+                                            action: #selector(editExcludedApps),
+                                            keyEquivalent: "")
+        editExclusionsItem.target = self
+        menu.addItem(editExclusionsItem)
+
+        let reloadExclusionsItem = NSMenuItem(title: "Презареди списъка с изключения",
+                                              action: #selector(reloadExcludedApps),
+                                              keyEquivalent: "")
+        reloadExclusionsItem.target = self
+        menu.addItem(reloadExclusionsItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let editKeymapItem = NSMenuItem(title: "Edit Keymap…",
                                         action: #selector(editKeymap),
                                         keyEquivalent: "")
@@ -554,6 +597,48 @@ class InputController: IMKInputController {
         NSLog("LangAutoSwitcher: Default set to Bulgarian (Cyrillic)")
     }
 
+    @objc private func toggleAutocorrect() {
+        detector.autocorrectEnabled.toggle()
+        NSLog("LangAutoSwitcher: Autocorrect %@",
+              detector.autocorrectEnabled ? "ON" : "OFF")
+    }
+
+    @objc private func toggleCurrentAppExclusion() {
+        guard let bundle = currentBundleID else { return }
+        if AppExclusionManager.isExcluded(bundle) {
+            AppExclusionManager.include(bundle)
+            isTerminalApp = Self.terminalBundleIDs.contains(bundle)
+                || Self.terminalPrefixes.contains(where: { bundle.hasPrefix($0) })
+        } else {
+            AppExclusionManager.exclude(bundle)
+            isTerminalApp = true
+            // If we were mid-composition, drop it cleanly; nothing more we
+            // can do for this session since we won't intercept any more keys.
+            composingBuffer = ""
+            pendingWord = nil
+        }
+    }
+
+    @objc private func editExcludedApps() {
+        NSWorkspace.shared.open(AppExclusionManager.fileURL)
+    }
+
+    @objc private func reloadExcludedApps() {
+        AppExclusionManager.reload()
+        // Re-evaluate the current app's status against the freshly loaded list.
+        if let bundle = currentBundleID {
+            let wasExcluded = isTerminalApp
+            let nowExcluded = Self.terminalBundleIDs.contains(bundle)
+                || AppExclusionManager.isExcluded(bundle)
+                || Self.terminalPrefixes.contains(where: { bundle.hasPrefix($0) })
+            isTerminalApp = nowExcluded
+            if wasExcluded != nowExcluded {
+                NSLog("LangAutoSwitcher: passthrough for '%@' is now %@",
+                      bundle, nowExcluded ? "ON" : "OFF")
+            }
+        }
+    }
+
     @objc private func checkForUpdates() {
         // `updaterController` is the SPUStandardUpdaterController declared at
         // top level in main.swift; visible to other files in the same module.
@@ -568,11 +653,15 @@ class InputController: IMKInputController {
         composingBuffer = ""
         pendingWord = nil
 
-        // Detect if we're in a terminal app
+        // Detect if we're in a terminal app or a user-excluded app
         isTerminalApp = false
+        currentBundleID = nil
         if let client = sender as? IMKTextInput,
            let bundleID = client.bundleIdentifier() {
+            currentBundleID = bundleID
             if Self.terminalBundleIDs.contains(bundleID) {
+                isTerminalApp = true
+            } else if AppExclusionManager.isExcluded(bundleID) {
                 isTerminalApp = true
             } else {
                 for prefix in Self.terminalPrefixes {
@@ -582,7 +671,7 @@ class InputController: IMKInputController {
                     }
                 }
             }
-            NSLog("LangAutoSwitcher: Activated for '%@' (terminal=%d, default=%@)",
+            NSLog("LangAutoSwitcher: Activated for '%@' (passthrough=%d, default=%@)",
                   bundleID, isTerminalApp, detector.defaultLanguage.rawValue)
         }
     }
