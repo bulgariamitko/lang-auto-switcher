@@ -181,8 +181,16 @@ impl LanguageDetector {
                 confidence = 1.0;
             }
         } else {
-            // In NEITHER dictionary — respect current flow first
+            // In NEITHER dictionary. Latin is the default: we don't recognise
+            // the word in either language, so we never guess a Cyrillic
+            // transliteration here. The 234k-entry, fully-inflected BG
+            // dictionary means an unknown word is almost always genuinely
+            // foreign (a brand like "Windows", a name, an English word) — not
+            // a mistyped Bulgarian one — so transliterating it was the wrong
+            // default.
             if self.last_word_language == DetectedLanguage::English && streak_len >= 2 {
+                // Continue an English streak; spell-correct only when
+                // autocorrect is on. Output stays Latin either way.
                 let corrected = if self.autocorrect_enabled {
                     correct_english(word, &self.en_dict, self.en_spell_check)
                 } else {
@@ -197,16 +205,16 @@ impl LanguageDetector {
                     output = word.to_string();
                     confidence = 0.5;
                 }
-            } else if self.last_word_language == DetectedLanguage::Bulgarian && streak_len >= 2 {
-                detected = DetectedLanguage::Bulgarian;
-                output = cyrillic.clone();
-                confidence = 0.5;
             } else if !self.autocorrect_enabled {
-                let r = self.resolve_unknown(word, &cyrillic);
-                detected = r.0;
-                output = r.1;
-                confidence = r.2;
+                // Default path (autocorrect off): keep the word verbatim in
+                // Latin and stay transparent (Uncertain) so a lone unknown
+                // word neither transliterates nor flips the surrounding flow.
+                detected = DetectedLanguage::Uncertain;
+                output = word.to_string();
+                confidence = 0.0;
             } else {
+                // Autocorrect opt-in: allow aggressive two-language spell
+                // correction, which may still recover a mistyped Bulgarian word.
                 let en_spell = correct_english(word, &self.en_dict, self.en_spell_check);
                 let bg_spell = correct_bulgarian(&cyrillic, &self.bg_dict, self.bg_spell_check);
 
@@ -574,6 +582,104 @@ mod tests {
         let r = d.process_word("w");
         assert_eq!(r.converted, "with",
             "with autocorrect on, 'w' is expanded — this is the bug we turned off");
+    }
+
+    #[test]
+    fn capitalized_unknown_word_in_bg_flow_stays_latin() {
+        // Regression: "...В смисъл Windows е нали" — typed in Latin, the
+        // brand name "Windows" is in NEITHER dictionary (en-dict has only
+        // "window"; "виндовс" isn't Bulgarian). With a Bulgarian streak
+        // established, the NEITHER-branch flow-continuation rule used to
+        // transliterate it to "Виндовс". The capital W marks it as a foreign
+        // proper noun: it must pass through verbatim as Latin, and the
+        // Bulgarian words after it must still convert.
+        let en: HashSet<String> = ["window"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["много", "хубаво", "е", "нали"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        // Establish a Bulgarian streak (both BG-only words).
+        let r = d.process_word("mnogo");
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.converted, "много");
+        let r = d.process_word("hubawo");
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.converted, "хубаво");
+
+        // The brand name must stay Latin, not become "Виндовс".
+        let r = d.process_word("Windows");
+        assert_eq!(r.converted, "Windows",
+            "capitalized unknown word in BG flow must stay Latin, got {:?}", r.converted);
+        assert_ne!(r.converted, "Виндовс");
+        assert_eq!(r.language, DetectedLanguage::Uncertain,
+            "proper noun should be transparent to the language streak");
+
+        // Bulgarian flow must survive the proper noun.
+        let r = d.process_word("nali");
+        assert_eq!(r.converted, "нали",
+            "BG flow must continue after the proper noun, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn unknown_word_in_bg_flow_stays_latin_by_default() {
+        // Policy: a word in NEITHER dictionary defaults to Latin — we never
+        // guess a Cyrillic transliteration. This holds even mid-Bulgarian-flow
+        // and regardless of case, because the 234k-entry BG dictionary makes
+        // an unknown word almost certainly foreign rather than a mistyped BG
+        // word. (Autocorrect-off is the default.)
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["много", "хубаво", "нали"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.process_word("mnogo");
+        d.process_word("hubawo");
+
+        let r = d.process_word("abcdef"); // unknown, lowercase
+        assert_eq!(r.converted, "abcdef",
+            "unknown word must stay Latin, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Uncertain,
+            "unknown word should be transparent to the streak");
+
+        // The Bulgarian flow must survive an unknown Latin word.
+        let r = d.process_word("nali");
+        assert_eq!(r.converted, "нали");
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn unknown_word_after_a_number_in_bg_flow_stays_latin() {
+        // Regression: "...файловете на 300 dpi" — typed in Latin as
+        // "...failovete na 300 dpi". "dpi" is in NEITHER dictionary (it isn't
+        // an English Scrabble word and "дпи" isn't Bulgarian), so it must stay
+        // Latin instead of transliterating to "дпи". The intervening "300" is
+        // non-alphabetic: process_word returns it Uncertain WITHOUT touching
+        // context, so the Bulgarian streak from "na" still leads into "dpi".
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["това", "на"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        // Phonetic map is QWERTY-position based: в is typed 'w' (not 'v').
+        let r = d.process_word("towa");
+        assert_eq!(r.converted, "това");
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+
+        let r = d.process_word("na");
+        assert_eq!(r.converted, "на");
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+
+        // The number is non-alphabetic — passes through, context untouched.
+        let r = d.process_word("300");
+        assert_eq!(r.converted, "300");
+        assert_eq!(r.language, DetectedLanguage::Uncertain);
+
+        // "dpi" must stay Latin, not become "дпи".
+        let r = d.process_word("dpi");
+        assert_eq!(r.converted, "dpi",
+            "unit abbreviation in BG flow must stay Latin, got {:?}", r.converted);
+        assert_ne!(r.converted, "дпи");
+        assert_eq!(r.language, DetectedLanguage::Uncertain);
     }
 
     #[test]
