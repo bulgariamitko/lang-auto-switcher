@@ -11,8 +11,11 @@ settings:
     DEVELOPMENT_TEAM: ""
     # Default version — overridden per-release by scripts/release.sh via
     # MARKETING_VERSION=… CURRENT_PROJECT_VERSION=… on the xcodebuild line.
-    MARKETING_VERSION: "2.7.3"
-    CURRENT_PROJECT_VERSION: "2073"
+    # Keep this equal to the latest published release: Sparkle compares
+    # CFBundleVersion against the appcast, and a lower default means any
+    # locally installed dev build gets silently replaced within the hour.
+    MARKETING_VERSION: "2.8.0"
+    CURRENT_PROJECT_VERSION: "20800"
 
 packages:
   Sparkle:
