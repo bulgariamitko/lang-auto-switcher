@@ -74,6 +74,23 @@ int  langauto_detector_get_default_language(LangAutoDetector* d);
 void langauto_detector_set_autocorrect_enabled(LangAutoDetector* d, int enabled);
 int  langauto_detector_get_autocorrect_enabled(LangAutoDetector* d);
 
+// Toggle Bulgarian typo rescue (adjacent-key substitution, transposition,
+// edit-distance-1, missing-space split — for unknown words mid-BG-flow).
+// On by default for new detectors.
+void langauto_detector_set_typo_correction_enabled(LangAutoDetector* d, int enabled);
+int  langauto_detector_get_typo_correction_enabled(LangAutoDetector* d);
+
+// Dictionary entry counts (for diagnostics). Out pointers may be NULL.
+void langauto_detector_dict_counts(LangAutoDetector* d, size_t* out_en, size_t* out_bg);
+
+// ---------- learned ("always Latin") words ----------
+// Words the user reverted: they pass through verbatim, beating dictionaries
+// and autocorrect. Matching is case-insensitive; words are stored lowercase.
+void   langauto_detector_add_user_latin_word(LangAutoDetector* d, const char* word);
+int    langauto_detector_remove_user_latin_word(LangAutoDetector* d, const char* word);
+void   langauto_detector_clear_user_latin_words(LangAutoDetector* d);
+size_t langauto_detector_user_latin_word_count(LangAutoDetector* d);
+
 // ---------- callback registration ----------
 // Pass NULL to clear an installed callback.
 void langauto_detector_set_en_spell_check(LangAutoDetector* d, LangAutoSpellCheckFn cb);

@@ -12,9 +12,17 @@ private let sharedSpellChecker = NSSpellChecker.shared
 private let sharedRecognizer = NLLanguageRecognizer()
 
 private func writeStringToBuffer(_ s: String, _ buf: UnsafeMutablePointer<CChar>?, _ size: Int) -> Int32 {
-    guard let buf = buf, !s.isEmpty else { return 0 }
+    // size must leave room for at least the null terminator; size <= 0 would
+    // underflow the copy-length math below.
+    guard let buf = buf, !s.isEmpty, size > 1 else { return 0 }
     let bytes = Array(s.utf8)
-    let copyLen = min(bytes.count, size - 1)
+    var copyLen = min(bytes.count, size - 1)
+    // Never truncate mid-UTF-8-sequence: back off past continuation bytes
+    // (0b10xxxxxx) so the receiver always gets valid UTF-8.
+    while copyLen > 0 && copyLen < bytes.count && (bytes[copyLen] & 0b1100_0000) == 0b1000_0000 {
+        copyLen -= 1
+    }
+    guard copyLen > 0 else { return 0 }
     bytes.withUnsafeBufferPointer { src in
         if let base = src.baseAddress {
             base.withMemoryRebound(to: CChar.self, capacity: copyLen) { srcChar in
@@ -108,13 +116,14 @@ final class LanguageDetector {
 
     /// Dictionary façade — exposes `.contains(_:)` so InputController doesn't need to change.
     struct DictionaryProxy {
-        fileprivate let detector: OpaquePointer
+        fileprivate let detector: OpaquePointer?
         fileprivate let language: DictionaryLanguage
 
         enum DictionaryLanguage { case en, bg }
 
         func contains(_ word: String) -> Bool {
-            word.withCString { cstr in
+            guard let detector = detector else { return false }
+            return word.withCString { cstr in
                 switch language {
                 case .en: return langauto_detector_word_in_en_dict(detector, cstr) == 1
                 case .bg: return langauto_detector_word_in_bg_dict(detector, cstr) == 1
@@ -125,16 +134,28 @@ final class LanguageDetector {
 
     // MARK: state
 
-    private let ptr: OpaquePointer
+    /// One detector per process. Dictionaries hold ~468k entries; IMK creates
+    /// an InputController per focused text field, so a per-controller detector
+    /// would re-parse and re-allocate everything on every focus change.
+    static let shared = LanguageDetector()
+
+    /// Nil when the Rust core couldn't be created (corrupt/missing
+    /// dictionaries). The detector then degrades to pass-through: every word
+    /// goes out exactly as typed.
+    private let ptr: OpaquePointer?
     private static let defaultLangKey = "LangAutoSwitcher_DefaultLanguage"
     private static let autocorrectKey = "LangAutoSwitcher_AutocorrectEnabled"
+    private static let typoCorrectionKey = "LangAutoSwitcher_TypoCorrectionEnabled"
 
     var defaultLanguage: DetectedLanguage {
         get {
-            DetectedLanguage.fromInt(langauto_detector_get_default_language(ptr))
+            guard let ptr = ptr else { return .english }
+            return DetectedLanguage.fromInt(langauto_detector_get_default_language(ptr))
         }
         set {
-            langauto_detector_set_default_language(ptr, newValue.asInt)
+            if let ptr = ptr {
+                langauto_detector_set_default_language(ptr, newValue.asInt)
+            }
             UserDefaults.standard.set(newValue.rawValue, forKey: Self.defaultLangKey)
         }
     }
@@ -144,64 +165,156 @@ final class LanguageDetector {
     /// for raw transliteration without "helpful" rewrites.
     var autocorrectEnabled: Bool {
         get {
-            langauto_detector_get_autocorrect_enabled(ptr) == 1
+            guard let ptr = ptr else { return false }
+            return langauto_detector_get_autocorrect_enabled(ptr) == 1
         }
         set {
-            langauto_detector_set_autocorrect_enabled(ptr, newValue ? 1 : 0)
+            if let ptr = ptr {
+                langauto_detector_set_autocorrect_enabled(ptr, newValue ? 1 : 0)
+            }
             UserDefaults.standard.set(newValue, forKey: Self.autocorrectKey)
         }
     }
 
+    /// Bulgarian typo rescue ("изтриеп" → "изтриеш", "можешда" → "можеш да").
+    /// On by default; independent of the aggressive `autocorrectEnabled`.
+    var typoCorrectionEnabled: Bool {
+        get {
+            guard let ptr = ptr else { return false }
+            return langauto_detector_get_typo_correction_enabled(ptr) == 1
+        }
+        set {
+            if let ptr = ptr {
+                langauto_detector_set_typo_correction_enabled(ptr, newValue ? 1 : 0)
+            }
+            UserDefaults.standard.set(newValue, forKey: Self.typoCorrectionKey)
+        }
+    }
+
     var isFirstWord: Bool {
-        langauto_detector_is_first_word(ptr) == 1
+        guard let ptr = ptr else { return true }
+        return langauto_detector_is_first_word(ptr) == 1
+    }
+
+    /// (english, bulgarian) dictionary entry counts — shown in Diagnostics.
+    var dictionaryCounts: (en: Int, bg: Int) {
+        guard let ptr = ptr else { return (0, 0) }
+        var en: size_t = 0
+        var bg: size_t = 0
+        langauto_detector_dict_counts(ptr, &en, &bg)
+        return (Int(en), Int(bg))
+    }
+
+    /// Number of learned ("always Latin") words currently active in the core.
+    var learnedWordCount: Int {
+        guard let ptr = ptr else { return 0 }
+        return Int(langauto_detector_user_latin_word_count(ptr))
+    }
+
+    /// True when the Rust core failed to initialize and we pass keystrokes
+    /// through unconverted.
+    var isPassThrough: Bool { ptr == nil }
+
+    // MARK: learned words
+
+    /// Remember `word` as always-Latin: persists it and updates the live core.
+    func learnLatinWord(_ word: String) {
+        UserWordsManager.add(word)
+        if let ptr = ptr {
+            word.withCString { langauto_detector_add_user_latin_word(ptr, $0) }
+        }
+    }
+
+    /// Forget all learned words (persisted + live core).
+    func clearLearnedWords() {
+        UserWordsManager.clear()
+        if let ptr = ptr {
+            langauto_detector_clear_user_latin_words(ptr)
+        }
+    }
+
+    /// Re-read learned_words.json (e.g., after a hand edit) into the live core.
+    func reloadLearnedWords() {
+        UserWordsManager.reload()
+        guard let ptr = ptr else { return }
+        langauto_detector_clear_user_latin_words(ptr)
+        for word in UserWordsManager.all() {
+            word.withCString { langauto_detector_add_user_latin_word(ptr, $0) }
+        }
+        NSLog("LangAutoSwitcher: reloaded %d learned word(s) into core", learnedWordCount)
     }
 
     var enDictionary: DictionaryProxy { DictionaryProxy(detector: ptr, language: .en) }
     var bgDictionary: DictionaryProxy { DictionaryProxy(detector: ptr, language: .bg) }
 
-    init() {
+    private init() {
         let enURL = Bundle.main.url(forResource: "en-dictionary", withExtension: "txt")
         let bgURL = Bundle.main.url(forResource: "bg-dictionary", withExtension: "txt")
         let enText = (try? enURL.flatMap { try String(contentsOf: $0, encoding: .utf8) }) ?? ""
         let bgText = (try? bgURL.flatMap { try String(contentsOf: $0, encoding: .utf8) }) ?? ""
+        if enText.isEmpty || bgText.isEmpty {
+            NSLog("LangAutoSwitcher: WARNING — dictionary resource missing or empty (en: %d bytes, bg: %d bytes)",
+                  enText.utf8.count, bgText.utf8.count)
+        }
 
         let handle: OpaquePointer? = enText.withCString { enCStr in
             bgText.withCString { bgCStr in
                 langauto_detector_new(enCStr, bgCStr)
             }
         }
-        guard let handle = handle else {
-            fatalError("LangAutoSwitcher: failed to create Rust detector — dictionaries missing?")
-        }
         self.ptr = handle
+        guard let ptr = handle else {
+            // Degrade to pass-through instead of crashing the host app:
+            // processWord returns input unchanged when ptr is nil, and the
+            // Diagnostics menu surfaces the zero dictionary counts.
+            NSLog("LangAutoSwitcher: ERROR — failed to create Rust detector; running in pass-through mode")
+            return
+        }
 
         // Install platform callbacks
-        langauto_detector_set_en_spell_check(self.ptr, enSpellCheckCallback)
-        langauto_detector_set_bg_spell_check(self.ptr, bgSpellCheckCallback)
-        langauto_detector_set_en_score(self.ptr, englishScoreCallback)
-        langauto_detector_set_bg_score(self.ptr, bulgarianScoreCallback)
+        langauto_detector_set_en_spell_check(ptr, enSpellCheckCallback)
+        langauto_detector_set_bg_spell_check(ptr, bgSpellCheckCallback)
+        langauto_detector_set_en_score(ptr, englishScoreCallback)
+        langauto_detector_set_bg_score(ptr, bulgarianScoreCallback)
 
         // Restore persisted default language preference
         if let stored = UserDefaults.standard.string(forKey: Self.defaultLangKey),
            let lang = DetectedLanguage(rawValue: stored) {
-            langauto_detector_set_default_language(self.ptr, lang.asInt)
+            langauto_detector_set_default_language(ptr, lang.asInt)
         }
 
         // Restore persisted autocorrect preference (default: off).
         // We only flip it on if the user explicitly enabled it before.
         if UserDefaults.standard.object(forKey: Self.autocorrectKey) != nil {
             let on = UserDefaults.standard.bool(forKey: Self.autocorrectKey)
-            langauto_detector_set_autocorrect_enabled(self.ptr, on ? 1 : 0)
+            langauto_detector_set_autocorrect_enabled(ptr, on ? 1 : 0)
+        }
+
+        // Restore persisted typo-correction preference (default: on).
+        if UserDefaults.standard.object(forKey: Self.typoCorrectionKey) != nil {
+            let on = UserDefaults.standard.bool(forKey: Self.typoCorrectionKey)
+            langauto_detector_set_typo_correction_enabled(ptr, on ? 1 : 0)
+        }
+
+        // Push learned ("always Latin") words into the core.
+        for word in UserWordsManager.all() {
+            word.withCString { langauto_detector_add_user_latin_word(ptr, $0) }
         }
 
         NSLog("LangAutoSwitcher: initialized Rust core")
     }
 
     deinit {
-        langauto_detector_free(ptr)
+        if let ptr = ptr {
+            langauto_detector_free(ptr)
+        }
     }
 
     func processWord(_ word: String) -> WordResult {
+        guard let ptr = ptr else {
+            // Pass-through mode: the core never came up, keep the word as typed.
+            return WordResult(original: word, converted: word, language: .uncertain, confidence: 0)
+        }
         var outLang: Int32 = LANGAUTO_LANG_UNCERTAIN
         var outConf: Double = 0
         let converted: String = word.withCString { cstr in
@@ -218,6 +331,8 @@ final class LanguageDetector {
     }
 
     func resetContext() {
-        langauto_detector_reset_context(ptr)
+        if let ptr = ptr {
+            langauto_detector_reset_context(ptr)
+        }
     }
 }

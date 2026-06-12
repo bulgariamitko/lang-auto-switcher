@@ -67,6 +67,13 @@ jobs:
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
+      - name: Run Swift unit tests
+        run: |
+          xcodebuild \
+            -project LangAutoSwitcher.xcodeproj \
+            -scheme LangAutoSwitcherTests \
+            -destination 'platform=macOS' \
+            -quiet test
       - name: Build LangAutoSwitcher.app
         run: |
           xcodebuild \

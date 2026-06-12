@@ -90,6 +90,21 @@ pub fn is_latin_word(word: &str) -> bool {
     !word.is_empty() && word.chars().all(|c| c.is_ascii_alphabetic() || is_mappable_special(c))
 }
 
+/// The QWERTY key that produces this Cyrillic char in the default phonetic
+/// map (lowercase). Used by typo ranking to detect adjacent-key mistakes.
+/// Ignores user keymap overrides — adjacency is a heuristic, not a contract.
+pub fn latin_key_for_cyrillic(c: char) -> Option<char> {
+    Some(match c {
+        'а' => 'a', 'б' => 'b', 'ц' => 'c', 'д' => 'd', 'е' => 'e',
+        'ф' => 'f', 'г' => 'g', 'х' => 'h', 'и' => 'i', 'й' => 'j',
+        'к' => 'k', 'л' => 'l', 'м' => 'm', 'н' => 'n', 'о' => 'o',
+        'п' => 'p', 'р' => 'r', 'с' => 's', 'т' => 't', 'у' => 'u',
+        'ж' => 'v', 'в' => 'w', 'ь' => 'x', 'ъ' => 'y', 'з' => 'z',
+        'я' => 'q', 'щ' => ']', 'ш' => '[', 'ч' => '`', 'ю' => '\\',
+        _ => return None,
+    })
+}
+
 /// True if any char is in the Cyrillic Unicode block U+0400..=U+04FF.
 pub fn contains_cyrillic(text: &str) -> bool {
     text.chars().any(|c| {

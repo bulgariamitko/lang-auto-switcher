@@ -19,7 +19,32 @@ packages:
     url: https://github.com/sparkle-project/Sparkle
     from: "2.9.0"
 
+schemes:
+  LangAutoSwitcherTests:
+    build:
+      targets:
+        LangAutoSwitcherTests: all
+    test:
+      gatherCoverageData: false
+      targets:
+        - LangAutoSwitcherTests
+
 targets:
+  # Unit tests for the pure Swift logic (TextHeuristics). The sources under
+  # test are compiled directly into the bundle so the tests don't need the
+  # app as a host — no IMK, no Sparkle, no Rust static lib.
+  LangAutoSwitcherTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: LangAutoSwitcherTests
+      - path: LangAutoSwitcher/Sources/TextHeuristics.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dklaturov.LangAutoSwitcherTests
+        CODE_SIGN_IDENTITY: "-"
+        GENERATE_INFOPLIST_FILE: YES
+
   LangAutoSwitcher:
     type: application
     platform: macOS

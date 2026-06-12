@@ -511,5 +511,73 @@ LangAutoSwitcher не прихваща клавиши там — просто п
                 type="application/octet-stream"
                 sparkle:edSignature="GMdvkxdygeFNP+97KZMCRaLz1hOlrg93iKkOPXovSvVfGa0NKbJZHrFah6k5o8/tyXUDXDM5UchGw3sfFSs+DQ==" />
         </item>
+        <item>
+            <title>Version 2.8.0</title>
+            <pubDate>Fri, 12 Jun 2026 09:27:47 GMT</pubDate>
+            <sparkle:version>20800</sparkle:version>
+            <sparkle:shortVersionString>2.8.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+
+<h2>v2.8.0 — Поправка на печатни грешки, връщане с ⌥⌘Z и диагностика</h2>
+
+<h3>Автоматична поправка на печатни грешки</h3>
+<p>Ако напишеш „<b>изтриеп</b>“ вместо „изтриеш“, вече се поправя само̀.
+Работи за думи на български, които не съществуват в речника, но са на
+една буква разстояние от истинска дума — сбъркан съседен клавиш
+(п е до ш на клавиатурата), разменени букви („изтиреш“) или
+пропуснат интервал („можешда“ → „можеш да“).</p>
+<p>Поправката е <b>внимателна</b>: не пипа кратки думи („dpi“, „css“),
+думи с главна буква („Windows“) и думи извън български контекст —
+те си остават на латиница както досега. Изключва се от менюто →
+„Поправяй печатни грешки“.</p>
+
+<h3>Сгрешена конверсия? ⌥⌘Z я връща — завинаги</h3>
+<p>Ако някоя дума се конвертира грешно, натисни <b>⌥⌘Z</b> веднага
+след нея: думата се връща точно както си я написал <b>и се запомня</b> —
+никога повече няма да се конвертира. Списъкът с научени думи се пази в
+<code>~/Library/Application Support/LangAutoSwitcher/learned_words.json</code>
+и се управлява от менюто („Научени думи…“, „Забрави всички научени думи“).</p>
+
+<h3>Непознатите думи остават на латиница</h3>
+<p>Дума, която я няма нито в английския, нито в българския речник
+(„dpi“, „Windows“, имена на брандове), вече не се транслитерира
+на сляпо към кирилица — остава както е написана.</p>
+
+<h3>Меню „Диагностика…“</h3>
+<p>Показва версията, датата на инсталирания binary, броя думи в
+речниците, научените думи и активните настройки — полезно, когато
+нещо изглежда счупено и трябва да се види какво точно върви.</p>
+
+<h3>Стабилност и памет</h3>
+<ul>
+  <li>Речниците (~468 хил. думи) вече се зареждат <b>веднъж</b> за
+      процес, а не при всяко фокусиране на текстово поле — осезаемо
+      по-малко памет и нула забавяне при смяна на полета.</li>
+  <li>Ако речниците липсват/са повредени, приложението вече не
+      гърми вътре в активното приложение, а просто пропуска
+      конверсията (и Диагностиката го показва).</li>
+  <li>Поправени дребни проблеми в Rust↔Swift моста (thread-safety,
+      UTF-8 граници при корекции от спелчекъра).</li>
+  <li>Премахнат боклук от българския речник („гоогле“), който караше
+      „google“ да се изписва на кирилица.</li>
+</ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.8.0/LangAutoSwitcher-v2.8.0.zip"
+                length="3907827"
+                type="application/octet-stream"
+                sparkle:edSignature="7ySMhZ0VPBfdb2hAxRM26vcLvG9qcONyWXshv+y7yFMTfMyAE+IhQgkQJKoxkN5Pew4gqAs/GqEh8yPXIN7eBg==" />
+        </item>
     </channel>
 </rss>

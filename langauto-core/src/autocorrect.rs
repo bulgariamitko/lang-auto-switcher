@@ -6,6 +6,8 @@
 
 use std::collections::HashSet;
 
+use crate::phonetic::latin_key_for_cyrillic;
+
 /// Optional spell-check hook. Platform shim sets it; returns the suggested
 /// correction (lowercase) or `None`.
 pub type SpellCheckFn = fn(&str) -> Option<String>;
@@ -166,6 +168,135 @@ pub fn edit_distance_1_cyrillic(word: &str, dict: &HashSet<String>) -> Option<St
     edit_distance_1_match(word, dict, CYRILLIC_LETTERS)
 }
 
+/// QWERTY physical neighbors for each key in the phonetic layout.
+fn qwerty_neighbors(key: char) -> &'static str {
+    match key {
+        'q' => "wa",      'w' => "qeas",   'e' => "wrsd",   'r' => "etdf",
+        't' => "ryfg",    'y' => "tugh",   'u' => "yihj",   'i' => "uojk",
+        'o' => "ipkl",    'p' => "o[l;",   '[' => "p];'",   ']' => "['\\",
+        'a' => "qwsz",    's' => "awedxz", 'd' => "serfcx", 'f' => "drtgvc",
+        'g' => "ftyhbv",  'h' => "gyujnb", 'j' => "huikmn", 'k' => "jiolm",
+        'l' => "kop;",    ';' => "lp['",   '\'' => ";[]",   '\\' => "]",
+        'z' => "asx",     'x' => "zsdc",   'c' => "xdfv",   'v' => "cfgb",
+        'b' => "vghn",    'n' => "bhjm",   'm' => "njk",
+        _ => "",
+    }
+}
+
+/// True when the QWERTY keys that type these two Cyrillic letters are
+/// physically adjacent — the signature of a fat-finger substitution
+/// ("изтриеп": п is typed 'p', ш is typed '[', and p/[ are neighbors).
+pub fn keys_adjacent(a: char, b: char) -> bool {
+    match (latin_key_for_cyrillic(a), latin_key_for_cyrillic(b)) {
+        (Some(ka), Some(kb)) => qwerty_neighbors(ka).contains(kb),
+        _ => false,
+    }
+}
+
+/// Ranked edit-distance-1 correction for Bulgarian typos. Unlike
+/// `edit_distance_1_cyrillic` (first match wins), this prefers the fix that
+/// best matches how typos actually happen:
+///   1. adjacent-key substitution (pressed the key next to the right one)
+///   2. transposition (two letters swapped)
+///   3. any other substitution
+///   4. deletion (one extra key pressed)
+///   5. insertion (one key missed)
+/// With a fully inflected dictionary a typo often has several distance-1
+/// neighbors ("изтриеп" → изтрием/изтриеш/изтрие); ranking picks the right one.
+pub fn best_bulgarian_typo_fix(word: &str, dict: &HashSet<String>) -> Option<String> {
+    let chars: Vec<char> = word.chars().collect();
+    let len = chars.len();
+    if len < 2 {
+        return None;
+    }
+
+    // Substitution — track the adjacent-key match separately from the rest.
+    let mut adjacent_sub: Option<String> = None;
+    let mut other_sub: Option<String> = None;
+    for i in 0..len {
+        let original = chars[i];
+        for &replacement in CYRILLIC_LETTERS {
+            if replacement == original {
+                continue;
+            }
+            let mut candidate = chars.clone();
+            candidate[i] = replacement;
+            let s: String = candidate.into_iter().collect();
+            if dict.contains(&s) {
+                if keys_adjacent(original, replacement) {
+                    if adjacent_sub.is_none() {
+                        adjacent_sub = Some(s);
+                    }
+                } else if other_sub.is_none() {
+                    other_sub = Some(s);
+                }
+            }
+        }
+    }
+    if adjacent_sub.is_some() {
+        return adjacent_sub;
+    }
+
+    // Transposition — "letters shifted".
+    for i in 0..(len - 1) {
+        if chars[i] == chars[i + 1] {
+            continue;
+        }
+        let mut candidate = chars.clone();
+        candidate.swap(i, i + 1);
+        let s: String = candidate.into_iter().collect();
+        if dict.contains(&s) {
+            return Some(s);
+        }
+    }
+
+    if other_sub.is_some() {
+        return other_sub;
+    }
+
+    // Deletion — an extra key was pressed.
+    for i in 0..len {
+        let mut candidate = chars.clone();
+        candidate.remove(i);
+        let s: String = candidate.into_iter().collect();
+        if dict.contains(&s) {
+            return Some(s);
+        }
+    }
+
+    // Insertion — a key was missed.
+    for i in 0..=len {
+        for &c in CYRILLIC_LETTERS {
+            let mut candidate = chars.clone();
+            candidate.insert(i, c);
+            let s: String = candidate.into_iter().collect();
+            if dict.contains(&s) {
+                return Some(s);
+            }
+        }
+    }
+
+    None
+}
+
+/// Missing-space rescue: "можешда" → "можеш да" when both halves are
+/// dictionary words. Returns None when no split point works.
+pub fn split_into_two_words(word: &str, dict: &HashSet<String>) -> Option<String> {
+    let chars: Vec<char> = word.chars().collect();
+    let len = chars.len();
+    if len < 3 {
+        return None;
+    }
+    for i in 1..len {
+        let left: String = chars[..i].iter().collect();
+        let right: String = chars[i..].iter().collect();
+        if dict.contains(&left) && dict.contains(&right) {
+            return Some(format!("{left} {right}"));
+        }
+    }
+    None
+}
+
 fn match_case(original: &str, corrected: &str) -> String {
     let first_upper = original.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
     if !first_upper {
@@ -320,6 +451,63 @@ mod tests {
     fn correct_bulgarian_falls_back_to_edit_distance() {
         let dict = build_dict(&["добре"]);
         assert_eq!(correct_bulgarian("дъбре", &dict, None), Some("добре".to_string()));
+    }
+
+    #[test]
+    fn keys_adjacent_uses_qwerty_layout() {
+        // п is typed 'p', ш is typed '[' — physically adjacent.
+        assert!(keys_adjacent('п', 'ш'));
+        // п ('p') and м ('m') are far apart.
+        assert!(!keys_adjacent('п', 'м'));
+        // в is typed 'w', е is typed 'e' — adjacent.
+        assert!(keys_adjacent('в', 'е'));
+    }
+
+    #[test]
+    fn best_typo_fix_prefers_adjacent_key_substitution() {
+        // "изтриеп" has three distance-1 dictionary neighbors; only
+        // п→ш is an adjacent-key substitution, so it must win over the
+        // alphabetically earlier "изтрием" and the deletion "изтрие".
+        let dict = build_dict(&["изтрие", "изтрием", "изтриеш"]);
+        assert_eq!(
+            best_bulgarian_typo_fix("изтриеп", &dict),
+            Some("изтриеш".to_string())
+        );
+    }
+
+    #[test]
+    fn best_typo_fix_prefers_transposition_over_far_substitution() {
+        // "нгео" → transposition gives "него"; no adjacent-key sub exists.
+        let dict = build_dict(&["него"]);
+        assert_eq!(
+            best_bulgarian_typo_fix("нгео", &dict),
+            Some("него".to_string())
+        );
+    }
+
+    #[test]
+    fn best_typo_fix_falls_back_to_deletion_and_insertion() {
+        let dict = build_dict(&["много"]);
+        // Extra letter pressed → deletion.
+        assert_eq!(best_bulgarian_typo_fix("мнного", &dict), Some("много".to_string()));
+        // Letter missed → insertion.
+        assert_eq!(best_bulgarian_typo_fix("мноо", &dict), Some("много".to_string()));
+        // Nothing within distance 1 → None.
+        assert_eq!(best_bulgarian_typo_fix("здравей", &dict), None);
+    }
+
+    #[test]
+    fn split_into_two_words_finds_missing_space() {
+        let dict = build_dict(&["можеш", "да", "това", "е"]);
+        assert_eq!(
+            split_into_two_words("можешда", &dict),
+            Some("можеш да".to_string())
+        );
+        assert_eq!(
+            split_into_two_words("товае", &dict),
+            Some("това е".to_string())
+        );
+        assert_eq!(split_into_two_words("здравейте", &dict), None);
     }
 
     #[test]

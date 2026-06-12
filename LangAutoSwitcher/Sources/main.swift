@@ -17,6 +17,13 @@ _ = server
 // overrides into the Rust core before any keystrokes arrive.
 KeymapManager.loadAndApply()
 
+// Warm the shared detector off the main thread: dictionary parsing
+// (~468k words) happens once per process now, and doing it here means the
+// first keystroke doesn't pay for it. `static let` makes this thread-safe.
+DispatchQueue.global(qos: .userInitiated).async {
+    _ = LanguageDetector.shared
+}
+
 // Sparkle auto-update.
 //
 // Input Method quirk: macOS owns our process lifecycle — when the user types

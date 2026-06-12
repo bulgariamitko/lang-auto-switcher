@@ -14,7 +14,9 @@ class InputController: IMKInputController {
 
     // MARK: - State
 
-    private let detector = LanguageDetector()
+    /// Shared across all controllers — IMK creates one controller per focused
+    /// text field, and the detector owns ~468k dictionary entries.
+    private let detector = LanguageDetector.shared
 
     /// Buffer of Latin characters for the word currently being composed.
     private var composingBuffer = ""
@@ -25,6 +27,11 @@ class InputController: IMKInputController {
     /// A word that was ambiguous (in both dictionaries, no context).
     /// We hold it and wait for the next word to decide its language.
     private var pendingWord: String? = nil
+
+    /// The last commit where conversion actually changed the text
+    /// (original as typed, converted as inserted). ⌥⌘Z reverts it and
+    /// remembers the word as always-Latin.
+    private var lastConversion: (original: String, converted: String)? = nil
 
     /// Whether the current app is a terminal — if so, pass all keys through directly.
     private var isTerminalApp = false
@@ -73,6 +80,14 @@ class InputController: IMKInputController {
         }
 
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // ⌥⌘Z — revert the last auto-conversion and remember the word as
+        // always-Latin, so it is never converted again.
+        if modifiers.contains(.command), modifiers.contains(.option),
+           event.charactersIgnoringModifiers?.lowercased() == "z" {
+            revertLastConversion(client: client)
+            return true
+        }
 
         // Let through Cmd+key shortcuts (Cmd+C, Cmd+V, etc.)
         if modifiers.contains(.command) {
@@ -143,7 +158,7 @@ class InputController: IMKInputController {
         if !isMappable && !isEmailUrl {
             // Emoticon detection: buffer like ":", ";", "=", ":-", ":'" followed by
             // ")", "(", "*", "|" etc. should stay raw ASCII (e.g., ":)", ":-(", ":*").
-            if Self.isEmoticonPrefix(composingBuffer) && Self.isEmoticonBody(char) {
+            if TextHeuristics.isEmoticonPrefix(composingBuffer) && TextHeuristics.isEmoticonBody(char) {
                 commitBufferRaw(client: client)
                 return false  // Let the body char pass through to form the emoticon
             }
@@ -203,16 +218,10 @@ class InputController: IMKInputController {
         let rawBuffer = composingBuffer
         composingBuffer = ""
 
-        // Strip trailing punctuation (., , ! ? : ;) before processing.
+        // Strip trailing punctuation (., , ! ?) before processing.
         // These get buffered for email/URL detection but shouldn't affect word detection.
         // Reattach after conversion.
-        let trailingPunct: Set<Character> = [".", ",", "!", "?"]
-        var word = rawBuffer
-        var trailing = ""
-        while let last = word.last, trailingPunct.contains(last) {
-            trailing = String(last) + trailing
-            word.removeLast()
-        }
+        let (word, trailing) = TextHeuristics.splitTrailingPunctuation(rawBuffer)
 
         // If only punctuation, just commit as-is
         guard !word.isEmpty else {
@@ -222,7 +231,7 @@ class InputController: IMKInputController {
         }
 
         // Emoticon detection: :D, :P, :-D, xD, etc. should stay raw ASCII.
-        if Self.isEmoticon(word) {
+        if TextHeuristics.isEmoticon(word) {
             var fullText = ""
             if let pending = pendingWord {
                 let result = detector.processWord(pending)
@@ -237,7 +246,7 @@ class InputController: IMKInputController {
 
         // Email/URL detection: if buffer contains @ or has URL-like patterns,
         // commit as raw Latin without conversion.
-        if isEmailOrUrl(word) {
+        if TextHeuristics.isEmailOrUrl(word) {
             // Commit pending word too if any (also as raw, since it's likely the local-part)
             var fullText = ""
             if let pending = pendingWord {
@@ -259,7 +268,9 @@ class InputController: IMKInputController {
                 let result = detector.processWord(partStr)
                 return result.converted
             }
-            let output = converted.joined(separator: "-") + trailing
+            let joined = converted.joined(separator: "-")
+            let output = joined + trailing
+            recordConversion(original: word, converted: joined)
 
             if let pending = pendingWord {
                 let pendingCyrillic = PhoneticMapper.toCyrillic(pending)
@@ -299,6 +310,12 @@ class InputController: IMKInputController {
             let fullText = pendingOutput + " " + secondResult.converted + trailing
             client.insertText(fullText,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
+            // Prefer the most recent converted token for ⌥⌘Z.
+            if secondResult.converted != word {
+                recordConversion(original: word, converted: secondResult.converted)
+            } else {
+                recordConversion(original: pendingWord!, converted: pendingOutput)
+            }
             pendingWord = nil
 
         } else if isAmbiguous && detector.isFirstWord {
@@ -309,6 +326,7 @@ class InputController: IMKInputController {
                 let result = detector.processWord(word)
                 client.insertText(result.converted + trailing,
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
+                recordConversion(original: word, converted: result.converted)
                 pendingWord = nil
             } else {
                 NSLog("LangAutoSwitcher: holding ambiguous first word '%@'", word)
@@ -324,6 +342,7 @@ class InputController: IMKInputController {
 
             client.insertText(result.converted + trailing,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
+            recordConversion(original: word, converted: result.converted)
         }
     }
 
@@ -339,6 +358,7 @@ class InputController: IMKInputController {
                 // Just the pending word
                 client.insertText(result.converted,
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
+                recordConversion(original: pending, converted: result.converted)
             } else {
                 // Pending + space + current word
                 let secondResult = detector.processWord(currentWord)
@@ -347,6 +367,11 @@ class InputController: IMKInputController {
                 let fullText = pendingOutput + " " + secondResult.converted
                 client.insertText(fullText,
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
+                if secondResult.converted != currentWord {
+                    recordConversion(original: currentWord, converted: secondResult.converted)
+                } else {
+                    recordConversion(original: pending, converted: pendingOutput)
+                }
             }
 
             pendingWord = nil
@@ -355,64 +380,55 @@ class InputController: IMKInputController {
             let result = detector.processWord(composingBuffer)
             client.insertText(result.converted,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
+            recordConversion(original: composingBuffer, converted: result.converted)
             composingBuffer = ""
         }
     }
 
-    /// Detect if a word is an email, URL, file path, or similar Latin-only construct.
-    private func isEmailOrUrl(_ word: String) -> Bool {
-        // Contains @ → email
-        if word.contains("@") { return true }
-        // Contains / → URL or path
-        if word.contains("/") { return true }
-        // Contains a digit → likely identifier/code/version
-        if word.contains(where: { $0.isNumber }) { return true }
-        // Contains . with letters around it → domain (e.g., gmail.com, foo.bar)
-        if word.contains(".") {
-            let parts = word.split(separator: ".")
-            if parts.count >= 2 && parts.allSatisfy({ !$0.isEmpty }) {
-                return true
-            }
+    // MARK: - Revert + learn
+
+    /// Revert the last auto-conversion: replace the converted text (still
+    /// sitting right before the caret) with the original Latin word, and
+    /// remember the word so it is never converted again.
+    private func revertLastConversion(client: IMKTextInput) {
+        guard let last = lastConversion, last.converted != last.original else {
+            NSLog("LangAutoSwitcher: revert requested but nothing to revert")
+            return
         }
-        return false
+
+        let sel = client.selectedRange()
+        guard sel.location != NSNotFound, sel.location > 0 else { return }
+
+        // Look back a small window before the caret (converted word plus a
+        // few chars of punctuation/whitespace) and find the converted text.
+        let convertedLen = (last.converted as NSString).length
+        let lookback = min(sel.location, convertedLen + 8)
+        let windowRange = NSRange(location: sel.location - lookback, length: lookback)
+        guard let attr = client.attributedSubstring(from: windowRange) else {
+            NSLog("LangAutoSwitcher: revert failed — client won't give us surrounding text")
+            return
+        }
+        let window = attr.string as NSString
+        let found = window.range(of: last.converted, options: .backwards)
+        guard found.location != NSNotFound else {
+            NSLog("LangAutoSwitcher: revert failed — '%@' not found near caret", last.converted)
+            return
+        }
+
+        let absolute = NSRange(location: windowRange.location + found.location,
+                               length: found.length)
+        client.insertText(last.original, replacementRange: absolute)
+        detector.learnLatinWord(last.original)
+        lastConversion = nil
+        NSLog("LangAutoSwitcher: reverted '%@' → '%@' and learned it",
+              last.converted, last.original)
     }
 
-    // MARK: - Emoticon detection
-
-    /// Buffer contents that, followed by an emoticon body char, form an emoticon.
-    /// (Used before force-commit when next char is non-mappable punctuation like ")")
-    private static let emoticonPrefixes: Set<String> = [
-        ":", ";", "=", ":-", ";-", "=-", ":'", ";'",
-    ]
-
-    /// Non-mappable, non-email chars that indicate an emoticon body
-    /// when they follow an emoticon prefix (e.g., ")" in ":)", "*" in ":*").
-    private static let emoticonBodyChars: Set<Character> = [
-        ")", "(", "*", "|",
-    ]
-
-    /// Complete emoticons that may end up fully buffered and committed via space/punct.
-    /// These typically have letter bodies (D, P, O) or digit bodies (3) that stay in buffer.
-    private static let knownEmoticons: Set<String> = [
-        ":D", ":P", ":p", ":O", ":o", ":3", ":X", ":x",
-        ";D", ";P", ";p",
-        "=D", "=P", "=p",
-        ":-D", ":-P", ":-p", ":-O", ":-o", ":-3",
-        ";-D", ";-P", ";-p",
-        ":'D",
-        "xD", "XD", "xP", "XP",
-    ]
-
-    private static func isEmoticonPrefix(_ buffer: String) -> Bool {
-        emoticonPrefixes.contains(buffer)
-    }
-
-    private static func isEmoticonBody(_ char: Character) -> Bool {
-        emoticonBodyChars.contains(char)
-    }
-
-    static func isEmoticon(_ word: String) -> Bool {
-        knownEmoticons.contains(word)
+    /// Record a commit so ⌥⌘Z can revert it (only when conversion changed the text).
+    private func recordConversion(original: String, converted: String) {
+        if original != converted {
+            lastConversion = (original, converted)
+        }
     }
 
     /// Commit pending word (converted normally) + composing buffer (raw ASCII).
@@ -513,6 +529,13 @@ class InputController: IMKInputController {
         autocorrectItem.state = detector.autocorrectEnabled ? .on : .off
         menu.addItem(autocorrectItem)
 
+        let typoFixItem = NSMenuItem(title: "Поправяй печатни грешки (изтриеп → изтриеш)",
+                                     action: #selector(toggleTypoCorrection),
+                                     keyEquivalent: "")
+        typoFixItem.target = self
+        typoFixItem.state = detector.typoCorrectionEnabled ? .on : .off
+        menu.addItem(typoFixItem)
+
         menu.addItem(NSMenuItem.separator())
 
         // Per-app pass-through: lets the user disable interception in apps
@@ -565,6 +588,40 @@ class InputController: IMKInputController {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Learned ("always Latin") words — populated by ⌥⌘Z reverts.
+        let revertItem = NSMenuItem(title: "Върни последната дума (⌥⌘Z)",
+                                    action: #selector(revertFromMenu),
+                                    keyEquivalent: "")
+        revertItem.target = self
+        revertItem.isEnabled = lastConversion != nil
+        menu.addItem(revertItem)
+
+        let editLearnedItem = NSMenuItem(title: "Научени думи… (\(detector.learnedWordCount))",
+                                         action: #selector(editLearnedWords),
+                                         keyEquivalent: "")
+        editLearnedItem.target = self
+        menu.addItem(editLearnedItem)
+
+        let reloadLearnedItem = NSMenuItem(title: "Презареди научените думи",
+                                           action: #selector(reloadLearnedWordsAction),
+                                           keyEquivalent: "")
+        reloadLearnedItem.target = self
+        menu.addItem(reloadLearnedItem)
+
+        let clearLearnedItem = NSMenuItem(title: "Забрави всички научени думи",
+                                          action: #selector(clearLearnedWordsAction),
+                                          keyEquivalent: "")
+        clearLearnedItem.target = self
+        menu.addItem(clearLearnedItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let diagnosticsItem = NSMenuItem(title: "Диагностика…",
+                                         action: #selector(showDiagnostics),
+                                         keyEquivalent: "")
+        diagnosticsItem.target = self
+        menu.addItem(diagnosticsItem)
+
         let updateItem = NSMenuItem(title: "Check for Updates…",
                                     action: #selector(checkForUpdates),
                                     keyEquivalent: "")
@@ -572,6 +629,66 @@ class InputController: IMKInputController {
         menu.addItem(updateItem)
 
         return menu
+    }
+
+    @objc private func revertFromMenu() {
+        guard let client = client() else { return }
+        revertLastConversion(client: client)
+    }
+
+    @objc private func editLearnedWords() {
+        UserWordsManager.ensureFileExists()
+        NSWorkspace.shared.open(UserWordsManager.fileURL)
+    }
+
+    @objc private func reloadLearnedWordsAction() {
+        detector.reloadLearnedWords()
+    }
+
+    @objc private func clearLearnedWordsAction() {
+        detector.clearLearnedWords()
+    }
+
+    @objc private func showDiagnostics() {
+        let bundle = Bundle.main
+        let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+
+        var buildDate = "unknown"
+        if let exeURL = bundle.executableURL,
+           let attrs = try? FileManager.default.attributesOfItem(atPath: exeURL.path),
+           let modified = attrs[.modificationDate] as? Date {
+            let fmt = DateFormatter()
+            fmt.dateStyle = .medium
+            fmt.timeStyle = .short
+            buildDate = fmt.string(from: modified)
+        }
+
+        let counts = detector.dictionaryCounts
+        let coreStatus = detector.isPassThrough
+            ? "❌ FAILED — pass-through mode (no conversion)"
+            : "OK"
+
+        let lines = [
+            "Version: \(version) (build \(build))",
+            "Binary date: \(buildDate)",
+            "Rust core: \(coreStatus)",
+            "EN dictionary: \(counts.en) words",
+            "BG dictionary: \(counts.bg) words",
+            "Learned (always Latin) words: \(detector.learnedWordCount)",
+            "Autocorrect: \(detector.autocorrectEnabled ? "on" : "off")",
+            "Typo correction: \(detector.typoCorrectionEnabled ? "on" : "off")",
+            "Default for unknown words: \(detector.defaultLanguage.rawValue)",
+            "Current app: \(currentBundleID ?? "—") (passthrough: \(isTerminalApp ? "yes" : "no"))",
+        ]
+
+        let alert = NSAlert()
+        alert.messageText = "LangAutoSwitcher Diagnostics"
+        alert.informativeText = lines.joined(separator: "\n")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     @objc private func editKeymap() {
@@ -601,6 +718,12 @@ class InputController: IMKInputController {
         detector.autocorrectEnabled.toggle()
         NSLog("LangAutoSwitcher: Autocorrect %@",
               detector.autocorrectEnabled ? "ON" : "OFF")
+    }
+
+    @objc private func toggleTypoCorrection() {
+        detector.typoCorrectionEnabled.toggle()
+        NSLog("LangAutoSwitcher: Typo correction %@",
+              detector.typoCorrectionEnabled ? "ON" : "OFF")
     }
 
     @objc private func toggleCurrentAppExclusion() {
@@ -652,6 +775,7 @@ class InputController: IMKInputController {
         detector.resetContext()
         composingBuffer = ""
         pendingWord = nil
+        lastConversion = nil
 
         // Detect if we're in a terminal app or a user-excluded app
         isTerminalApp = false

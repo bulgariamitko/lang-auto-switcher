@@ -13,6 +13,7 @@
 use std::collections::HashSet;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::ptr;
+use std::sync::Mutex;
 
 use crate::detector::{DetectedLanguage, LanguageDetector};
 use crate::phonetic;
@@ -315,6 +316,124 @@ pub unsafe extern "C" fn langauto_detector_get_autocorrect_enabled(
     if (*d).inner.autocorrect_enabled { 1 } else { 0 }
 }
 
+/// Enable or disable Bulgarian typo rescue (adjacent-key/edit-distance-1
+/// correction + missing-space split for unknown words mid-BG-flow).
+/// On by default.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_set_typo_correction_enabled(
+    d: *mut LangAutoDetector,
+    enabled: c_int,
+) {
+    if d.is_null() {
+        return;
+    }
+    (*d).inner.typo_correction_enabled = enabled != 0;
+}
+
+/// 1 if typo correction is currently enabled, 0 otherwise.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_get_typo_correction_enabled(
+    d: *mut LangAutoDetector,
+) -> c_int {
+    if d.is_null() {
+        return 0;
+    }
+    if (*d).inner.typo_correction_enabled { 1 } else { 0 }
+}
+
+/// Write the number of entries in the English / Bulgarian dictionaries to the
+/// output pointers (each may be null). Used by the diagnostics UI.
+///
+/// # Safety
+/// `d` must be a valid detector pointer; out pointers may be null.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_dict_counts(
+    d: *mut LangAutoDetector,
+    out_en: *mut usize,
+    out_bg: *mut usize,
+) {
+    let (en, bg) = if d.is_null() {
+        (0, 0)
+    } else {
+        ((*d).inner.en_dict.len(), (*d).inner.bg_dict.len())
+    };
+    if !out_en.is_null() {
+        *out_en = en;
+    }
+    if !out_bg.is_null() {
+        *out_bg = bg;
+    }
+}
+
+// ---------- learned ("always Latin") words ----------
+
+/// Remember `word` as always-Latin: it will pass through verbatim, beating
+/// dictionaries and autocorrect. Case-insensitive.
+///
+/// # Safety
+/// `d` and `word` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_add_user_latin_word(
+    d: *mut LangAutoDetector,
+    word: *const c_char,
+) {
+    if d.is_null() {
+        return;
+    }
+    if let Some(w) = c_to_rust_str(word) {
+        (*d).inner.add_user_latin_word(w);
+    }
+}
+
+/// Forget a learned word. Returns 1 if it was present.
+///
+/// # Safety
+/// `d` and `word` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_remove_user_latin_word(
+    d: *mut LangAutoDetector,
+    word: *const c_char,
+) -> c_int {
+    if d.is_null() {
+        return 0;
+    }
+    match c_to_rust_str(word) {
+        Some(w) if (*d).inner.remove_user_latin_word(w) => 1,
+        _ => 0,
+    }
+}
+
+/// Forget all learned words.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_clear_user_latin_words(d: *mut LangAutoDetector) {
+    if !d.is_null() {
+        (*d).inner.clear_user_latin_words();
+    }
+}
+
+/// Number of learned words.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_user_latin_word_count(
+    d: *mut LangAutoDetector,
+) -> usize {
+    if d.is_null() {
+        return 0;
+    }
+    (*d).inner.user_latin_word_count()
+}
+
 // ---------- callback registration ----------
 //
 // Callbacks use C signatures the platform shim implements. They are stored as
@@ -333,20 +452,32 @@ pub type CScoreFn = extern "C" fn(*const c_char) -> f64;
 
 // Storage for the FFI callbacks. We bridge them to Rust fn pointers via
 // global state because Rust fn pointers can't capture environment.
-// Single global is acceptable because there's exactly one detector per process
-// in practice (the input method instance).
+// Single set of globals is acceptable because there's exactly one detector
+// per process in practice (the input method instance). Mutex (not static mut)
+// because IMK gives no thread-affinity guarantee for callback installation
+// vs. use.
 
-static mut EN_SPELL_CB: Option<CSpellCheckFn> = None;
-static mut BG_SPELL_CB: Option<CSpellCheckFn> = None;
-static mut EN_SCORE_CB: Option<CScoreFn> = None;
-static mut BG_SCORE_CB: Option<CScoreFn> = None;
+static EN_SPELL_CB: Mutex<Option<CSpellCheckFn>> = Mutex::new(None);
+static BG_SPELL_CB: Mutex<Option<CSpellCheckFn>> = Mutex::new(None);
+static EN_SCORE_CB: Mutex<Option<CScoreFn>> = Mutex::new(None);
+static BG_SCORE_CB: Mutex<Option<CScoreFn>> = Mutex::new(None);
+
+fn load_cb<T: Copy>(slot: &Mutex<Option<T>>) -> Option<T> {
+    slot.lock().ok().and_then(|g| *g)
+}
+
+fn store_cb<T: Copy>(slot: &Mutex<Option<T>>, cb: Option<T>) {
+    if let Ok(mut g) = slot.lock() {
+        *g = cb;
+    }
+}
 
 fn bridge_en_spell(word: &str) -> Option<String> {
-    bridge_spell(word, unsafe { EN_SPELL_CB })
+    bridge_spell(word, load_cb(&EN_SPELL_CB))
 }
 
 fn bridge_bg_spell(word: &str) -> Option<String> {
-    bridge_spell(word, unsafe { BG_SPELL_CB })
+    bridge_spell(word, load_cb(&BG_SPELL_CB))
 }
 
 fn bridge_spell(word: &str, cb: Option<CSpellCheckFn>) -> Option<String> {
@@ -363,11 +494,11 @@ fn bridge_spell(word: &str, cb: Option<CSpellCheckFn>) -> Option<String> {
 }
 
 fn bridge_en_score(text: &str) -> f64 {
-    bridge_score(text, unsafe { EN_SCORE_CB })
+    bridge_score(text, load_cb(&EN_SCORE_CB))
 }
 
 fn bridge_bg_score(text: &str) -> f64 {
-    bridge_score(text, unsafe { BG_SCORE_CB })
+    bridge_score(text, load_cb(&BG_SCORE_CB))
 }
 
 fn bridge_score(text: &str, cb: Option<CScoreFn>) -> f64 {
@@ -389,7 +520,7 @@ pub unsafe extern "C" fn langauto_detector_set_en_spell_check(
     if d.is_null() {
         return;
     }
-    EN_SPELL_CB = cb;
+    store_cb(&EN_SPELL_CB, cb);
     (*d).inner.en_spell_check = if cb.is_some() { Some(bridge_en_spell) } else { None };
 }
 
@@ -405,7 +536,7 @@ pub unsafe extern "C" fn langauto_detector_set_bg_spell_check(
     if d.is_null() {
         return;
     }
-    BG_SPELL_CB = cb;
+    store_cb(&BG_SPELL_CB, cb);
     (*d).inner.bg_spell_check = if cb.is_some() { Some(bridge_bg_spell) } else { None };
 }
 
@@ -421,7 +552,7 @@ pub unsafe extern "C" fn langauto_detector_set_en_score(
     if d.is_null() {
         return;
     }
-    EN_SCORE_CB = cb;
+    store_cb(&EN_SCORE_CB, cb);
     (*d).inner.score_english = if cb.is_some() { Some(bridge_en_score) } else { None };
 }
 
@@ -437,7 +568,7 @@ pub unsafe extern "C" fn langauto_detector_set_bg_score(
     if d.is_null() {
         return;
     }
-    BG_SCORE_CB = cb;
+    store_cb(&BG_SCORE_CB, cb);
     (*d).inner.score_bulgarian = if cb.is_some() { Some(bridge_bg_score) } else { None };
 }
 

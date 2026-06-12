@@ -9,8 +9,9 @@
 use std::collections::HashSet;
 
 use crate::autocorrect::{
-    correct_bulgarian, correct_english, expand_bulgarian_abbreviation,
-    expand_english_abbreviation, SpellCheckFn,
+    best_bulgarian_typo_fix, correct_bulgarian, correct_english,
+    expand_bulgarian_abbreviation, expand_english_abbreviation,
+    split_into_two_words, SpellCheckFn,
 };
 use crate::phonetic::{is_latin_word, to_cyrillic};
 
@@ -57,6 +58,17 @@ pub struct LanguageDetector {
     /// mn→много…), NSSpellChecker corrections, and edit-distance-1 matching.
     /// Words go through as typed (after phonetic conversion only).
     pub autocorrect_enabled: bool,
+    /// Typo rescue for Bulgarian words (on by default, independent of
+    /// `autocorrect_enabled`): a word in NEITHER dictionary that is mid-BG-flow,
+    /// lowercase, and ≥5 letters gets one shot at an edit-distance-1 fix
+    /// (adjacent-key substitution preferred) or a missing-space split.
+    /// Conservative on purpose — "dpi"/"Windows"-style unknowns stay Latin.
+    pub typo_correction_enabled: bool,
+    /// Words the user has explicitly reverted ("learned words"). Stored
+    /// lowercase. These always pass through verbatim in Latin — they beat
+    /// dictionaries, abbreviation expansion, and flow continuation, because
+    /// the user already told us a conversion of this word was wrong.
+    user_latin_words: HashSet<String>,
 
     last_word_language: DetectedLanguage,
     recent_languages: Vec<DetectedLanguage>,
@@ -75,6 +87,8 @@ impl LanguageDetector {
             score_bulgarian: None,
             default_language: DetectedLanguage::English,
             autocorrect_enabled: false,
+            typo_correction_enabled: true,
+            user_latin_words: HashSet::new(),
             last_word_language: DetectedLanguage::Uncertain,
             recent_languages: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
             recent_confidences: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
@@ -84,6 +98,29 @@ impl LanguageDetector {
 
     pub fn is_first_word(&self) -> bool {
         self.recent_languages.is_empty()
+    }
+
+    /// Remember a word as "always Latin". Stored lowercase; matching in
+    /// `process_word` is case-insensitive.
+    pub fn add_user_latin_word(&mut self, word: &str) {
+        let w = word.trim().to_lowercase();
+        if !w.is_empty() {
+            self.user_latin_words.insert(w);
+        }
+    }
+
+    /// Forget a previously learned word. Returns true if it was present.
+    pub fn remove_user_latin_word(&mut self, word: &str) -> bool {
+        self.user_latin_words.remove(&word.trim().to_lowercase())
+    }
+
+    /// Forget all learned words.
+    pub fn clear_user_latin_words(&mut self) {
+        self.user_latin_words.clear();
+    }
+
+    pub fn user_latin_word_count(&self) -> usize {
+        self.user_latin_words.len()
     }
 
     pub fn reset_context(&mut self) {
@@ -104,6 +141,18 @@ impl LanguageDetector {
         }
 
         let lower = word.to_lowercase();
+
+        // 0. Learned words: the user reverted a conversion of this word once,
+        // so it always stays Latin verbatim. Transparent to the streak
+        // (no push_context) so it behaves like "Windows"/"dpi" pass-throughs.
+        if self.user_latin_words.contains(&lower) {
+            return WordResult {
+                original: word.to_string(),
+                converted: word.to_string(),
+                language: DetectedLanguage::Uncertain,
+                confidence: 1.0,
+            };
+        }
 
         // 1. English abbreviation expansion (unless we're in a Bulgarian flow)
         if self.autocorrect_enabled {
@@ -206,12 +255,21 @@ impl LanguageDetector {
                     confidence = 0.5;
                 }
             } else if !self.autocorrect_enabled {
-                // Default path (autocorrect off): keep the word verbatim in
-                // Latin and stay transparent (Uncertain) so a lone unknown
-                // word neither transliterates nor flips the surrounding flow.
-                detected = DetectedLanguage::Uncertain;
-                output = word.to_string();
-                confidence = 0.0;
+                // Default path (autocorrect off). First give a mid-BG-flow
+                // word one shot at typo rescue ("изтриеп" → "изтриеш",
+                // "можешда" → "можеш да"); if that declines, keep the word
+                // verbatim in Latin and stay transparent (Uncertain) so a
+                // lone unknown word neither transliterates nor flips the
+                // surrounding flow.
+                if let Some(fixed) = self.try_bulgarian_typo_fix(word, &cyrillic_lower) {
+                    detected = DetectedLanguage::Bulgarian;
+                    output = fixed;
+                    confidence = 0.85;
+                } else {
+                    detected = DetectedLanguage::Uncertain;
+                    output = word.to_string();
+                    confidence = 0.0;
+                }
             } else {
                 // Autocorrect opt-in: allow aggressive two-language spell
                 // correction, which may still recover a mistyped Bulgarian word.
@@ -279,6 +337,32 @@ impl LanguageDetector {
     }
 
     // ---------- private helpers ----------
+
+    /// Typo rescue for a word in NEITHER dictionary. Guards keep the
+    /// "unknown words stay Latin" policy intact for the cases it exists for:
+    /// - only mid-Bulgarian-flow (foreign words usually arrive in EN context)
+    /// - never for capitalized words (brands/proper nouns: "Windows")
+    /// - never for short words (<5 letters: "dpi", "css", "png" are
+    ///   abbreviations, not typos)
+    fn try_bulgarian_typo_fix(&self, word: &str, cyrillic_lower: &str) -> Option<String> {
+        if !self.typo_correction_enabled {
+            return None;
+        }
+        if self.last_word_language != DetectedLanguage::Bulgarian {
+            return None;
+        }
+        if word.chars().next().map_or(false, |c| c.is_uppercase()) {
+            return None;
+        }
+        if cyrillic_lower.chars().count() < 5 {
+            return None;
+        }
+
+        if let Some(fixed) = best_bulgarian_typo_fix(cyrillic_lower, &self.bg_dict) {
+            return Some(fixed);
+        }
+        split_into_two_words(cyrillic_lower, &self.bg_dict)
+    }
 
     fn resolve_ambiguous(&self, word: &str, cyrillic: &str) -> (DetectedLanguage, String, f64) {
         let dominant = self.dominant_recent_language();
@@ -680,6 +764,202 @@ mod tests {
             "unit abbreviation in BG flow must stay Latin, got {:?}", r.converted);
         assert_ne!(r.converted, "дпи");
         assert_eq!(r.language, DetectedLanguage::Uncertain);
+    }
+
+    #[test]
+    fn bg_typo_adjacent_key_substitution_is_corrected() {
+        // Real user report: "ок можеш да ги изтриеп от при нас вече" —
+        // "изтриеп" is a typo for "изтриеш" (п is typed 'p', ш is typed '[',
+        // and p/[ are adjacent keys). The dictionary also contains the
+        // distance-1 neighbors "изтрием" and "изтрие"; the adjacent-key
+        // ranking must pick "изтриеш" over both.
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["можеш", "да", "ги", "изтрие", "изтрием", "изтриеш"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        // "можеш" is typed "move[" (ж='v', ш='[').
+        let r = d.process_word("move[");
+        assert_eq!(r.converted, "можеш");
+        let r = d.process_word("da");
+        assert_eq!(r.converted, "да");
+        let r = d.process_word("gi");
+        assert_eq!(r.converted, "ги");
+
+        let r = d.process_word("iztriep");
+        assert_eq!(r.converted, "изтриеш",
+            "typo 'изтриеп' must correct to 'изтриеш', got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn bg_typo_transposed_letters_are_corrected() {
+        // "letters are shifted": "изтиреш" (ир swapped) → "изтриеш".
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["можеш", "да", "изтриеш"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.process_word("move[");
+        d.process_word("da");
+
+        let r = d.process_word("iztire["); // изтиреш
+        assert_eq!(r.converted, "изтриеш",
+            "transposed letters must be corrected, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn bg_missing_space_is_split_into_two_words() {
+        // Spacebar missed: "можешда" → "можеш да".
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["това", "можеш", "да"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.process_word("towa");
+
+        let r = d.process_word("move[da"); // можешда
+        assert_eq!(r.converted, "можеш да",
+            "joined words must be split, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn typo_correction_keeps_short_unknowns_latin() {
+        // "dpi" must stay Latin even though its transliteration "дпи" is
+        // edit-distance-1 from the real Bulgarian word "дни" — short
+        // unknowns are abbreviations, not typos.
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["дни", "това", "на"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.process_word("towa");
+        d.process_word("na");
+
+        let r = d.process_word("dpi");
+        assert_eq!(r.converted, "dpi",
+            "short unknown must not be 'typo-fixed' to дни, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Uncertain);
+    }
+
+    #[test]
+    fn typo_correction_keeps_capitalized_unknowns_latin() {
+        // Capitalized = proper noun/brand. Even a perfect distance-1 match
+        // must not fire.
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["това", "изтриеш"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.process_word("towa");
+
+        let r = d.process_word("Iztriep");
+        assert_eq!(r.converted, "Iztriep",
+            "capitalized unknown must stay Latin, got {:?}", r.converted);
+    }
+
+    #[test]
+    fn typo_correction_requires_bulgarian_flow() {
+        // No BG context → no rescue; the word stays Latin (default policy).
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["изтриеш"].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        let r = d.process_word("iztriep"); // first word, no flow
+        assert_eq!(r.converted, "iztriep");
+        assert_eq!(r.language, DetectedLanguage::Uncertain);
+    }
+
+    #[test]
+    fn typo_correction_can_be_disabled() {
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["можеш", "да", "изтриеш"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        assert!(d.typo_correction_enabled, "typo correction must default to on");
+        d.typo_correction_enabled = false;
+        d.process_word("move[");
+        d.process_word("da");
+
+        let r = d.process_word("iztriep");
+        assert_eq!(r.converted, "iztriep",
+            "with typo correction off the word must stay Latin, got {:?}", r.converted);
+    }
+
+    #[test]
+    fn learned_word_beats_typo_correction() {
+        // If the user reverted a "correction" once, never fix it again.
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["можеш", "да", "изтриеш"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.add_user_latin_word("iztriep");
+        d.process_word("move[");
+        d.process_word("da");
+
+        let r = d.process_word("iztriep");
+        assert_eq!(r.converted, "iztriep");
+    }
+
+    #[test]
+    fn learned_word_stays_latin_even_when_in_bg_dictionary() {
+        // The user reverted a conversion of this word once, so it must stay
+        // Latin forever — even though its transliteration IS a valid
+        // Bulgarian dictionary word and the flow is Bulgarian.
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["това", "на", "нали"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.add_user_latin_word("na"); // "na" → "на" is in the BG dict
+
+        let r = d.process_word("towa");
+        assert_eq!(r.converted, "това");
+
+        let r = d.process_word("na");
+        assert_eq!(r.converted, "na",
+            "learned word must stay Latin, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Uncertain);
+
+        // Matching is case-insensitive.
+        let r = d.process_word("Na");
+        assert_eq!(r.converted, "Na");
+
+        // The Bulgarian flow must survive the learned word.
+        let r = d.process_word("nali");
+        assert_eq!(r.converted, "нали");
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn learned_word_beats_abbreviation_expansion() {
+        // Learned words win over autocorrect's abbreviation table: if the
+        // user said "w" stays "w", it must not expand to "with" even with
+        // autocorrect on.
+        let mut d = LanguageDetector::new(english_dict(), bulgarian_dict());
+        d.autocorrect_enabled = true;
+        d.add_user_latin_word("w");
+
+        let r = d.process_word("w");
+        assert_eq!(r.converted, "w");
+    }
+
+    #[test]
+    fn learned_words_can_be_removed_and_cleared() {
+        let mut d = LanguageDetector::new(english_dict(), bulgarian_dict());
+        d.add_user_latin_word("dpi");
+        d.add_user_latin_word("Foo"); // stored lowercase
+        assert_eq!(d.user_latin_word_count(), 2);
+
+        assert!(d.remove_user_latin_word("FOO"));
+        assert!(!d.remove_user_latin_word("foo"));
+        assert_eq!(d.user_latin_word_count(), 1);
+
+        d.clear_user_latin_words();
+        assert_eq!(d.user_latin_word_count(), 0);
+
+        // After forgetting, normal detection applies again.
+        d.add_user_latin_word("napisah");
+        d.clear_user_latin_words();
+        let r = d.process_word("napisah");
+        assert_eq!(r.converted, "написах");
     }
 
     #[test]
