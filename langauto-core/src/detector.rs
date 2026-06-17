@@ -13,7 +13,7 @@ use crate::autocorrect::{
     expand_bulgarian_abbreviation, expand_english_abbreviation,
     split_into_two_words, SpellCheckFn,
 };
-use crate::phonetic::{is_latin_word, to_cyrillic};
+use crate::phonetic::{contains_cyrillic_only_key, is_latin_word, to_cyrillic};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetectedLanguage {
@@ -237,7 +237,17 @@ impl LanguageDetector {
             // foreign (a brand like "Windows", a name, an English word) — not
             // a mistyped Bulgarian one — so transliterating it was the wrong
             // default.
-            if self.last_word_language == DetectedLanguage::English && streak_len >= 2 {
+            //
+            // Exception: a word containing a Cyrillic-only key (\ [ ] ` …) is
+            // a deliberate Cyrillic letter the user typed — nobody puts those
+            // mid-word in English — so it overrides the Latin default and even
+            // an English streak.
+            let cyrillic_key_signal = contains_cyrillic_only_key(word);
+
+            if self.last_word_language == DetectedLanguage::English
+                && streak_len >= 2
+                && !cyrillic_key_signal
+            {
                 // Continue an English streak; spell-correct only when
                 // autocorrect is on. Output stays Latin either way.
                 let corrected = if self.autocorrect_enabled {
@@ -265,11 +275,24 @@ impl LanguageDetector {
                     detected = DetectedLanguage::Bulgarian;
                     output = fixed;
                     confidence = 0.85;
+                } else if cyrillic_key_signal {
+                    // No dictionary/typo match, but the Cyrillic-only key
+                    // makes the intent clear — convert verbatim ("превютата").
+                    detected = DetectedLanguage::Bulgarian;
+                    output = cyrillic.clone();
+                    confidence = 0.9;
                 } else {
                     detected = DetectedLanguage::Uncertain;
                     output = word.to_string();
                     confidence = 0.0;
                 }
+            } else if cyrillic_key_signal {
+                // Autocorrect on, but the Cyrillic-only key still pins the
+                // language to Bulgarian; spell-correct toward it if we can.
+                detected = DetectedLanguage::Bulgarian;
+                output = correct_bulgarian(&cyrillic, &self.bg_dict, self.bg_spell_check)
+                    .unwrap_or_else(|| cyrillic.clone());
+                confidence = 0.9;
             } else {
                 // Autocorrect opt-in: allow aggressive two-language spell
                 // correction, which may still recover a mistyped Bulgarian word.
@@ -666,6 +689,69 @@ mod tests {
         let r = d.process_word("w");
         assert_eq!(r.converted, "with",
             "with autocorrect on, 'w' is expanded — this is the bug we turned off");
+    }
+
+    #[test]
+    fn unknown_word_with_cyrillic_only_key_converts() {
+        // Regression: "с превютата на файловете…" typed as
+        // "s prew\tata na ...". "превютата" (preview + article, a colloquial
+        // loanword) is in NEITHER dictionary, and at sentence start there's
+        // no BG flow yet — so it used to stay Latin, showing the literal '\'.
+        // But the '\' key only exists to type 'ю': its presence proves the
+        // user is typing Bulgarian, so the word must convert.
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["на", "файловете"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        // First real word of the sentence — no prior context.
+        let r = d.process_word("prew\\tata");
+        assert_eq!(r.converted, "превютата",
+            "word with a Cyrillic-only key ('\\') must convert, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_ne!(r.converted, "prew\\tata", "the literal backslash must not survive");
+
+        // And it establishes BG flow for the rest of the sentence.
+        let r = d.process_word("na");
+        assert_eq!(r.converted, "на");
+        let r = d.process_word("fajlowete");
+        assert_eq!(r.converted, "файловете");
+    }
+
+    #[test]
+    fn cyrillic_only_key_overrides_english_streak() {
+        // Even mid-English-streak, a word with a bracket/backslash key is a
+        // deliberate Cyrillic switch and must convert rather than stay Latin.
+        let en: HashSet<String> = ["the", "code", "is"]
+            .iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = HashSet::new();
+        let mut d = LanguageDetector::new(en, bg);
+        d.process_word("the");
+        d.process_word("code");
+        d.process_word("is");
+
+        // "ka[ta" → "кашта" (no dict needed; the '[' forces Cyrillic).
+        let r = d.process_word("ka[ta");
+        assert_eq!(r.converted, "кашта",
+            "a Cyrillic-only key must override the English streak, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn typo_fix_still_wins_over_raw_cyrillic_for_special_key_words() {
+        // A word that has BOTH a Cyrillic-only key and a fixable typo must
+        // still get the typo fix (best spelling), not the raw conversion.
+        // "iztire[" → raw "изтиреш", but the dict has "изтриеш": typo fix wins.
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["можеш", "да", "изтриеш"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.process_word("move["); // можеш — establishes BG flow
+        d.process_word("da");
+
+        let r = d.process_word("iztire[");
+        assert_eq!(r.converted, "изтриеш",
+            "typo fix must beat raw cyrillic, got {:?}", r.converted);
     }
 
     #[test]

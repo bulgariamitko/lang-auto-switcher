@@ -105,6 +105,22 @@ pub fn latin_key_for_cyrillic(c: char) -> Option<char> {
     })
 }
 
+/// True if the word contains a key that exists *only* to type a Cyrillic
+/// letter. The bracket / backslash / backtick / brace / pipe / tilde keys map
+/// to щ ш ч ю and never appear inside a real Latin word — so a word containing
+/// one is a strong signal the user is typing Bulgarian, even when the result
+/// isn't in the dictionary (e.g. "превютата", a colloquial loanword).
+///
+/// Deliberately excludes the other mappable specials ; ' : " — those are real
+/// English punctuation (apostrophes in contractions, semicolons, quotes) and
+/// would misfire.
+#[inline]
+pub fn contains_cyrillic_only_key(word: &str) -> bool {
+    word.chars().any(|c| matches!(c,
+        '[' | ']' | '`' | '\\' | '{' | '}' | '~' | '|'
+    ))
+}
+
 /// True if any char is in the Cyrillic Unicode block U+0400..=U+04FF.
 pub fn contains_cyrillic(text: &str) -> bool {
     text.chars().any(|c| {
@@ -159,6 +175,20 @@ mod tests {
         assert!(!is_latin_word("hello1"));
         assert!(!is_latin_word("здравей"));
         assert!(!is_latin_word("hello world"));
+    }
+
+    #[test]
+    fn cyrillic_only_key_detection() {
+        // Bracket/backslash/backtick/brace/pipe/tilde keys — Cyrillic-only.
+        assert!(contains_cyrillic_only_key("prew\\tata")); // ю
+        assert!(contains_cyrillic_only_key("ka[ta"));      // ш
+        assert!(contains_cyrillic_only_key("po]e"));       // щ
+        assert!(contains_cyrillic_only_key("ma`a"));       // ч
+        // No special key — plain Latin or English punctuation must NOT trip it.
+        assert!(!contains_cyrillic_only_key("windows"));
+        assert!(!contains_cyrillic_only_key("dpi"));
+        assert!(!contains_cyrillic_only_key("don't"));     // apostrophe is English
+        assert!(!contains_cyrillic_only_key("a;b"));       // semicolon excluded
     }
 
     #[test]

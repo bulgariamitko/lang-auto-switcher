@@ -244,6 +244,31 @@ class InputController: IMKInputController {
             return
         }
 
+        // Numbers stuck to a word ("2години", "години2", "2ри"): a digit
+        // anywhere in a token otherwise makes isEmailOrUrl keep the whole
+        // thing Latin. Peel edge digits and, if the letter core is a clear
+        // Bulgarian word, convert just the core and reattach the digits.
+        // Identifiers (mp3, covid19, v2) have a non-BG core and fall through.
+        if pendingWord == nil {
+            let (lead, core, trail) = TextHeuristics.splitEdgeDigits(word)
+            if (!lead.isEmpty || !trail.isEmpty),
+               !core.isEmpty,
+               !core.contains(where: { $0.isNumber }),
+               !TextHeuristics.isEmailOrUrl(core) {
+                let coreCyrillic = PhoneticMapper.toCyrillic(core).lowercased()
+                let coreIsBG = detector.bgDictionary.contains(coreCyrillic)
+                let coreIsEN = detector.enDictionary.contains(core.lowercased())
+                if coreIsBG && !coreIsEN {
+                    let result = detector.processWord(core)
+                    let converted = lead + result.converted + trail
+                    client.insertText(converted + trailing,
+                                      replacementRange: NSRange(location: NSNotFound, length: 0))
+                    recordConversion(original: word, converted: converted)
+                    return
+                }
+            }
+        }
+
         // Email/URL detection: if buffer contains @ or has URL-like patterns,
         // commit as raw Latin without conversion.
         if TextHeuristics.isEmailOrUrl(word) {

@@ -78,4 +78,27 @@ enum TextHeuristics {
         }
         return (word, trailing)
     }
+
+    // MARK: - Edge digits
+
+    /// Peel ASCII digits off both ends: "2godini" → ("2", "godini", ""),
+    /// "godini2" → ("", "godini", "2"), "2ри3" → ("2", "ри", "3").
+    /// A token with interior digits ("covid19vaccine", "mp3") keeps them in
+    /// the core, so the caller can still treat it as a non-convertible
+    /// identifier. The core is empty for all-digit input.
+    static func splitEdgeDigits(_ raw: String) -> (lead: String, core: String, trail: String) {
+        let isDigit: (Character) -> Bool = { $0.isASCII && $0.isNumber }
+        var lead = ""
+        var core = Substring(raw)
+        while let first = core.first, isDigit(first) {
+            lead.append(first)
+            core = core.dropFirst()
+        }
+        var trailReversed = ""
+        while let last = core.last, isDigit(last) {
+            trailReversed.append(last)
+            core = core.dropLast()
+        }
+        return (lead, String(core), String(trailReversed.reversed()))
+    }
 }

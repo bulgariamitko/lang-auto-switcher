@@ -76,4 +76,52 @@ final class TextHeuristicsTests: XCTestCase {
         XCTAssertEqual(word, "foo.bar")
         XCTAssertEqual(trailing, ".")
     }
+
+    // MARK: - Edge digits
+
+    func testLeadingDigitsArePeeled() {
+        let (lead, core, trail) = TextHeuristics.splitEdgeDigits("2godini")
+        XCTAssertEqual(lead, "2")
+        XCTAssertEqual(core, "godini")
+        XCTAssertEqual(trail, "")
+    }
+
+    func testTrailingDigitsArePeeled() {
+        let (lead, core, trail) = TextHeuristics.splitEdgeDigits("godini2")
+        XCTAssertEqual(lead, "")
+        XCTAssertEqual(core, "godini")
+        XCTAssertEqual(trail, "2")
+    }
+
+    func testDigitsOnBothEndsArePeeled() {
+        let (lead, core, trail) = TextHeuristics.splitEdgeDigits("12ri345")
+        XCTAssertEqual(lead, "12")
+        XCTAssertEqual(core, "ri")
+        XCTAssertEqual(trail, "345")
+    }
+
+    func testInteriorDigitsStayInCore() {
+        // "covid19vaccine" / "mp3foo" keep interior digits so the caller can
+        // recognize them as identifiers and leave them Latin.
+        let (lead, core, trail) = TextHeuristics.splitEdgeDigits("covid19vaccine")
+        XCTAssertEqual(lead, "")
+        XCTAssertEqual(core, "covid19vaccine")
+        XCTAssertEqual(trail, "")
+        XCTAssertTrue(core.contains(where: { $0.isNumber }))
+    }
+
+    func testAllDigitsLeavesEmptyCore() {
+        let (lead, core, trail) = TextHeuristics.splitEdgeDigits("2024")
+        XCTAssertEqual(core, "")
+        // Lead greedily takes everything; trail is empty once core is empty.
+        XCTAssertEqual(lead, "2024")
+        XCTAssertEqual(trail, "")
+    }
+
+    func testNoDigitsIsUntouched() {
+        let (lead, core, trail) = TextHeuristics.splitEdgeDigits("godini")
+        XCTAssertEqual(lead, "")
+        XCTAssertEqual(core, "godini")
+        XCTAssertEqual(trail, "")
+    }
 }
