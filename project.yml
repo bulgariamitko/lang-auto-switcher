@@ -81,6 +81,11 @@ targets:
           - Latn
           - Cyrl
         tsInputMethodIconFileKey: icon.tiff
+        # Treat icon.tiff as a template image (black + alpha): the system
+        # tints the plate for menu state — light plate in dark menus, dark
+        # in light menus — exactly like the native БГ/A input icons. Without
+        # this the black plate renders literally and looks like a blob.
+        TISIconIsTemplate: true
         CFBundleIconFile: AppIcon
         # macOS 11+ honors CFBundleIconName from an asset catalog; this gives
         # us light/dark theme support that a static .icns can't provide.

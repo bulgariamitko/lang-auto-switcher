@@ -42,6 +42,8 @@
 	<string>hqwuql1C6NLqHU8XUQAX8ZXJxuA3byj9DIl0hnf2Xhg=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>3600</integer>
+	<key>TISIconIsTemplate</key>
+	<true/>
 	<key>TISIntendedLanguage</key>
 	<string>en</string>
 	<key>tsInputMethodCharacterRepertoireKey</key>
