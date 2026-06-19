@@ -79,6 +79,21 @@ enum TextHeuristics {
         return (word, trailing)
     }
 
+    // MARK: - Key routing
+
+    /// macOS virtual keyCode for the Delete (Backspace) key.
+    static let deleteKeyCode: UInt16 = 51
+
+    /// True for a plain Backspace/Delete press (no Command/Option) that the IME
+    /// must consume itself while composing. We route this by keyCode rather than
+    /// by the event's `characters`, because a Delete keyDown can arrive with an
+    /// empty `characters` payload; if that slips through, the host app deletes an
+    /// on-screen character while our composing buffer keeps it, and the word
+    /// commits with a stray/dropped letter (so "несериозно" lands in Latin).
+    static func isPlainBackspace(keyCode: UInt16, command: Bool, option: Bool) -> Bool {
+        keyCode == deleteKeyCode && !command && !option
+    }
+
     // MARK: - Edge digits
 
     /// Peel ASCII digits off both ends: "2godini" → ("2", "godini", ""),

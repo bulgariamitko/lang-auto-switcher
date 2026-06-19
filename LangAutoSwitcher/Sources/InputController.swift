@@ -33,6 +33,13 @@ class InputController: IMKInputController {
     /// remembers the word as always-Latin.
     private var lastConversion: (original: String, converted: String)? = nil
 
+    /// The last committed word regardless of whether conversion changed it
+    /// (original Latin as typed, output as inserted). ⌥⌘B forces it to
+    /// Bulgarian and remembers it as always-Bulgarian — this needs the
+    /// unchanged case too (a word that stayed Latin), which `lastConversion`
+    /// deliberately drops.
+    private var lastCommitted: (original: String, output: String)? = nil
+
     /// Whether the current app is a terminal — if so, pass all keys through directly.
     private var isTerminalApp = false
 
@@ -74,18 +81,45 @@ class InputController: IMKInputController {
 
         let client = sender as! IMKTextInput
 
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // Backspace/Delete (keyCode 51) is handled by keyCode here — BEFORE the
+        // `characters` guard below — so it is reliably consumed while composing.
+        // Some apps/contexts deliver a Delete keyDown with an empty `characters`
+        // payload; if that slips past the guard and returns false mid-word, the
+        // app deletes an on-screen character while our composing buffer keeps
+        // it. The two desync, so the word commits with a stray/dropped letter
+        // ("neseru"+⌫+"iozno" → "neseruiozno") which isn't in the dictionary and
+        // lands in Latin instead of converting to "несериозно". Plain Delete
+        // only — let Cmd/Opt+Delete fall through to their existing handling.
+        if TextHeuristics.isPlainBackspace(keyCode: event.keyCode,
+                                           command: modifiers.contains(.command),
+                                           option: modifiers.contains(.option)) {
+            if isComposing {
+                return handleBackspace(client: client)
+            }
+            return false  // not composing — let the app delete normally
+        }
+
         // Get the characters
         guard let chars = event.characters, !chars.isEmpty else {
             return false
         }
-
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         // ⌥⌘Z — revert the last auto-conversion and remember the word as
         // always-Latin, so it is never converted again.
         if modifiers.contains(.command), modifiers.contains(.option),
            event.charactersIgnoringModifiers?.lowercased() == "z" {
             revertLastConversion(client: client)
+            return true
+        }
+
+        // ⌥⌘B — force the last committed word to Bulgarian and remember it as
+        // always-Bulgarian, so an out-of-dictionary word ("клипчета") converts
+        // from now on without editing the dictionary file.
+        if modifiers.contains(.command), modifiers.contains(.option),
+           event.charactersIgnoringModifiers?.lowercased() == "b" {
+            forceLastWordToBulgarian(client: client)
             return true
         }
 
@@ -449,8 +483,60 @@ class InputController: IMKInputController {
               last.converted, last.original)
     }
 
-    /// Record a commit so ⌥⌘Z can revert it (only when conversion changed the text).
+    /// Force the last committed word to Bulgarian: replace the text sitting
+    /// before the caret with its Cyrillic transliteration and remember the word
+    /// as always-Bulgarian, so it converts automatically from now on. The
+    /// mirror image of `revertLastConversion`.
+    private func forceLastWordToBulgarian(client: IMKTextInput) {
+        guard let last = lastCommitted else {
+            NSLog("LangAutoSwitcher: force-to-BG requested but nothing committed yet")
+            return
+        }
+        let cyrillic = PhoneticMapper.toCyrillic(last.original)
+        // Always remember it so future occurrences convert on their own.
+        detector.learnBulgarianWord(last.original)
+
+        // If what we already inserted is identical to the Cyrillic form, there
+        // is nothing on screen to replace — just learning it is enough.
+        guard cyrillic != last.output else {
+            NSLog("LangAutoSwitcher: '%@' already Bulgarian; learned it", last.original)
+            lastCommitted = nil
+            return
+        }
+
+        let sel = client.selectedRange()
+        guard sel.location != NSNotFound, sel.location > 0 else { return }
+
+        // Look back a small window before the caret and find the text we
+        // inserted, so we can swap it for the Cyrillic form in place.
+        let outputLen = (last.output as NSString).length
+        let lookback = min(sel.location, outputLen + 8)
+        let windowRange = NSRange(location: sel.location - lookback, length: lookback)
+        guard let attr = client.attributedSubstring(from: windowRange) else {
+            NSLog("LangAutoSwitcher: force-to-BG failed — client won't give us surrounding text")
+            return
+        }
+        let window = attr.string as NSString
+        let found = window.range(of: last.output, options: .backwards)
+        guard found.location != NSNotFound else {
+            NSLog("LangAutoSwitcher: force-to-BG failed — '%@' not found near caret", last.output)
+            return
+        }
+
+        let absolute = NSRange(location: windowRange.location + found.location,
+                               length: found.length)
+        client.insertText(cyrillic, replacementRange: absolute)
+        // The forward swap is itself revertible with ⌥⌘Z.
+        lastConversion = (last.original, cyrillic)
+        lastCommitted = (last.original, cyrillic)
+        NSLog("LangAutoSwitcher: forced '%@' → '%@' and learned it as Bulgarian",
+              last.output, cyrillic)
+    }
+
+    /// Record a commit so ⌥⌘Z can revert it (only when conversion changed the
+    /// text) and ⌥⌘B can force it to Bulgarian (always, even unchanged).
     private func recordConversion(original: String, converted: String) {
+        lastCommitted = (original, converted)
         if original != converted {
             lastConversion = (original, converted)
         }
@@ -641,6 +727,24 @@ class InputController: IMKInputController {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Forced ("always Bulgarian") words — populated by ⌥⌘B.
+        let forceItem = NSMenuItem(title: "Направи последната дума българска (⌥⌘B)",
+                                   action: #selector(forceBulgarianFromMenu),
+                                   keyEquivalent: "")
+        forceItem.target = self
+        forceItem.isEnabled = lastCommitted != nil
+        menu.addItem(forceItem)
+
+        let clearForcedItem = NSMenuItem(
+            title: "Забрави наложените български думи (\(detector.forcedBgWordCount))",
+            action: #selector(clearForcedBgWordsAction),
+            keyEquivalent: "")
+        clearForcedItem.target = self
+        clearForcedItem.isEnabled = detector.forcedBgWordCount > 0
+        menu.addItem(clearForcedItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let diagnosticsItem = NSMenuItem(title: "Диагностика…",
                                          action: #selector(showDiagnostics),
                                          keyEquivalent: "")
@@ -659,6 +763,15 @@ class InputController: IMKInputController {
     @objc private func revertFromMenu() {
         guard let client = client() else { return }
         revertLastConversion(client: client)
+    }
+
+    @objc private func forceBulgarianFromMenu() {
+        guard let client = client() else { return }
+        forceLastWordToBulgarian(client: client)
+    }
+
+    @objc private func clearForcedBgWordsAction() {
+        detector.clearForcedBgWords()
     }
 
     @objc private func editLearnedWords() {
@@ -801,6 +914,7 @@ class InputController: IMKInputController {
         composingBuffer = ""
         pendingWord = nil
         lastConversion = nil
+        lastCommitted = nil
 
         // Detect if we're in a terminal app or a user-excluded app
         isTerminalApp = false

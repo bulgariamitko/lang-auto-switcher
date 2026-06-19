@@ -14,8 +14,8 @@ settings:
     # Keep this equal to the latest published release: Sparkle compares
     # CFBundleVersion against the appcast, and a lower default means any
     # locally installed dev build gets silently replaced within the hour.
-    MARKETING_VERSION: "2.8.0"
-    CURRENT_PROJECT_VERSION: "20800"
+    MARKETING_VERSION: "2.8.2"
+    CURRENT_PROJECT_VERSION: "20802"
 
 packages:
   Sparkle:

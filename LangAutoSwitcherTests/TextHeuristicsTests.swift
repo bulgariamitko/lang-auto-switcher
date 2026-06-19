@@ -77,6 +77,22 @@ final class TextHeuristicsTests: XCTestCase {
         XCTAssertEqual(trailing, ".")
     }
 
+    // MARK: - Key routing
+
+    func testPlainBackspaceIsRecognizedByKeyCode() {
+        // keyCode 51 with no Command/Option is a plain Delete the IME consumes.
+        XCTAssertTrue(TextHeuristics.isPlainBackspace(keyCode: 51, command: false, option: false))
+    }
+
+    func testModifiedOrOtherKeysAreNotPlainBackspace() {
+        // Cmd/Opt+Delete fall through to their existing handling.
+        XCTAssertFalse(TextHeuristics.isPlainBackspace(keyCode: 51, command: true, option: false))
+        XCTAssertFalse(TextHeuristics.isPlainBackspace(keyCode: 51, command: false, option: true))
+        // Any other key is never a backspace.
+        XCTAssertFalse(TextHeuristics.isPlainBackspace(keyCode: 0, command: false, option: false))
+        XCTAssertFalse(TextHeuristics.isPlainBackspace(keyCode: 49, command: false, option: false)) // space
+    }
+
     // MARK: - Edge digits
 
     func testLeadingDigitsArePeeled() {

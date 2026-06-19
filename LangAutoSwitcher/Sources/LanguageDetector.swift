@@ -211,6 +211,12 @@ final class LanguageDetector {
         return Int(langauto_detector_user_latin_word_count(ptr))
     }
 
+    /// Number of forced ("always Bulgarian") words currently active in the core.
+    var forcedBgWordCount: Int {
+        guard let ptr = ptr else { return 0 }
+        return Int(langauto_detector_user_bg_word_count(ptr))
+    }
+
     /// True when the Rust core failed to initialize and we pass keystrokes
     /// through unconverted.
     var isPassThrough: Bool { ptr == nil }
@@ -233,15 +239,42 @@ final class LanguageDetector {
         }
     }
 
+    /// Remember `word` as always-Bulgarian: persists it and updates the live
+    /// core. `word` is the Latin spelling the user typed.
+    func learnBulgarianWord(_ word: String) {
+        UserWordsManager.addBg(word)
+        guard let ptr = ptr else { return }
+        // Newest wins: drop any opposite always-Latin entry from the live core
+        // (UserWordsManager already did so on disk).
+        word.withCString {
+            _ = langauto_detector_remove_user_latin_word(ptr, $0)
+            langauto_detector_add_user_bg_word(ptr, $0)
+        }
+    }
+
+    /// Forget all forced ("always Bulgarian") words (persisted + live core).
+    func clearForcedBgWords() {
+        UserWordsManager.clearBg()
+        if let ptr = ptr {
+            langauto_detector_clear_user_bg_words(ptr)
+        }
+    }
+
     /// Re-read learned_words.json (e.g., after a hand edit) into the live core.
+    /// Refreshes BOTH the always-Latin and always-Bulgarian sets.
     func reloadLearnedWords() {
         UserWordsManager.reload()
         guard let ptr = ptr else { return }
         langauto_detector_clear_user_latin_words(ptr)
+        langauto_detector_clear_user_bg_words(ptr)
         for word in UserWordsManager.all() {
             word.withCString { langauto_detector_add_user_latin_word(ptr, $0) }
         }
-        NSLog("LangAutoSwitcher: reloaded %d learned word(s) into core", learnedWordCount)
+        for word in UserWordsManager.allBg() {
+            word.withCString { langauto_detector_add_user_bg_word(ptr, $0) }
+        }
+        NSLog("LangAutoSwitcher: reloaded %d always-Latin + %d always-Bulgarian word(s) into core",
+              learnedWordCount, forcedBgWordCount)
     }
 
     var enDictionary: DictionaryProxy { DictionaryProxy(detector: ptr, language: .en) }
@@ -299,6 +332,10 @@ final class LanguageDetector {
         // Push learned ("always Latin") words into the core.
         for word in UserWordsManager.all() {
             word.withCString { langauto_detector_add_user_latin_word(ptr, $0) }
+        }
+        // Push forced ("always Bulgarian") words into the core.
+        for word in UserWordsManager.allBg() {
+            word.withCString { langauto_detector_add_user_bg_word(ptr, $0) }
         }
 
         NSLog("LangAutoSwitcher: initialized Rust core")

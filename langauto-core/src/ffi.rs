@@ -434,6 +434,67 @@ pub unsafe extern "C" fn langauto_detector_user_latin_word_count(
     (*d).inner.user_latin_word_count()
 }
 
+/// Remember a word as "always Bulgarian" (forced via ⌥⌘B). `word` is the
+/// lowercase Latin spelling the user typed.
+///
+/// # Safety
+/// `d` and `word` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_add_user_bg_word(
+    d: *mut LangAutoDetector,
+    word: *const c_char,
+) {
+    if d.is_null() {
+        return;
+    }
+    if let Some(w) = c_to_rust_str(word) {
+        (*d).inner.add_user_bg_word(w);
+    }
+}
+
+/// Forget a forced-Bulgarian word. Returns 1 if it was present.
+///
+/// # Safety
+/// `d` and `word` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_remove_user_bg_word(
+    d: *mut LangAutoDetector,
+    word: *const c_char,
+) -> c_int {
+    if d.is_null() {
+        return 0;
+    }
+    match c_to_rust_str(word) {
+        Some(w) if (*d).inner.remove_user_bg_word(w) => 1,
+        _ => 0,
+    }
+}
+
+/// Forget all forced-Bulgarian words.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_clear_user_bg_words(d: *mut LangAutoDetector) {
+    if !d.is_null() {
+        (*d).inner.clear_user_bg_words();
+    }
+}
+
+/// Number of forced-Bulgarian words.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_user_bg_word_count(
+    d: *mut LangAutoDetector,
+) -> usize {
+    if d.is_null() {
+        return 0;
+    }
+    (*d).inner.user_bg_word_count()
+}
+
 // ---------- callback registration ----------
 //
 // Callbacks use C signatures the platform shim implements. They are stored as

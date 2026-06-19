@@ -279,8 +279,29 @@ pub fn best_bulgarian_typo_fix(word: &str, dict: &HashSet<String>) -> Option<Str
     None
 }
 
+/// Short Bulgarian function words (clitics, prepositions, conjunctions,
+/// particles). These are the words a missed spacebar actually glues onto a
+/// neighbour — "можешда", "натова", "иеми". A split is only trusted when one
+/// of its halves is one of these; otherwise a perfectly good single word that
+/// merely happens to decompose into two content words ("клипчета" → клип+чета,
+/// "вертикално" → вер+тикално) gets wrongly torn apart.
+const FUNCTION_WORDS: &[&str] = &[
+    "да", "е", "и", "а", "но", "или", "не", "ще", "се", "си", "съм", "са",
+    "го", "я", "ги", "ме", "те", "ни", "ви", "ми", "ти", "му", "им",
+    "ли", "че", "то", "за", "на", "от", "до", "по", "в", "с", "във", "със",
+    "бе", "ето", "ама",
+];
+
+fn is_function_word(w: &str) -> bool {
+    FUNCTION_WORDS.contains(&w)
+}
+
 /// Missing-space rescue: "можешда" → "можеш да" when both halves are
-/// dictionary words. Returns None when no split point works.
+/// dictionary words AND at least one half is a short function word — the only
+/// kind a slipped spacebar realistically glues. Without that guard the split
+/// fires on ordinary single words that decompose into two dictionary words
+/// (the diminutive "клипчета" = клип + чета), which is the bug this prevents.
+/// Returns None when no trusted split point works.
 pub fn split_into_two_words(word: &str, dict: &HashSet<String>) -> Option<String> {
     let chars: Vec<char> = word.chars().collect();
     let len = chars.len();
@@ -290,7 +311,10 @@ pub fn split_into_two_words(word: &str, dict: &HashSet<String>) -> Option<String
     for i in 1..len {
         let left: String = chars[..i].iter().collect();
         let right: String = chars[i..].iter().collect();
-        if dict.contains(&left) && dict.contains(&right) {
+        if dict.contains(&left)
+            && dict.contains(&right)
+            && (is_function_word(&left) || is_function_word(&right))
+        {
             return Some(format!("{left} {right}"));
         }
     }
@@ -508,6 +532,28 @@ mod tests {
             Some("това е".to_string())
         );
         assert_eq!(split_into_two_words("здравейте", &dict), None);
+    }
+
+    #[test]
+    fn split_requires_a_function_word_half() {
+        // Regression: a real single word that happens to decompose into two
+        // content words must NOT be split. "клипчета" (a diminutive) splits
+        // into "клип" + "чета", both real words — but neither is a function
+        // word, so the split must be refused.
+        let dict = build_dict(&["клип", "чета", "клипчета"]);
+        assert_eq!(split_into_two_words("клипчета", &dict), None,
+            "two content words must not be split apart");
+
+        // But a genuine missed space onto a function word still splits.
+        let dict2 = build_dict(&["клип", "е", "на", "представлението"]);
+        assert_eq!(
+            split_into_two_words("клипе", &dict2),
+            Some("клип е".to_string()),
+            "missed space before the clitic 'е' must still split");
+        assert_eq!(
+            split_into_two_words("напредставлението", &dict2),
+            Some("на представлението".to_string()),
+            "missed space after the preposition 'на' must still split");
     }
 
     #[test]

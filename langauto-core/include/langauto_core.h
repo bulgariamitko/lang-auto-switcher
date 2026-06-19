@@ -91,6 +91,15 @@ int    langauto_detector_remove_user_latin_word(LangAutoDetector* d, const char*
 void   langauto_detector_clear_user_latin_words(LangAutoDetector* d);
 size_t langauto_detector_user_latin_word_count(LangAutoDetector* d);
 
+// ---------- forced ("always Bulgarian") words ----------
+// Words the user forced via the force-to-Bulgarian hotkey: the lowercase Latin
+// spelling always converts to Cyrillic and leads Bulgarian flow — the mirror
+// image of the learned-Latin words above. Matching is case-insensitive.
+void   langauto_detector_add_user_bg_word(LangAutoDetector* d, const char* word);
+int    langauto_detector_remove_user_bg_word(LangAutoDetector* d, const char* word);
+void   langauto_detector_clear_user_bg_words(LangAutoDetector* d);
+size_t langauto_detector_user_bg_word_count(LangAutoDetector* d);
+
 // ---------- callback registration ----------
 // Pass NULL to clear an installed callback.
 void langauto_detector_set_en_spell_check(LangAutoDetector* d, LangAutoSpellCheckFn cb);

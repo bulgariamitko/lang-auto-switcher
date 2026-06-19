@@ -69,6 +69,12 @@ pub struct LanguageDetector {
     /// dictionaries, abbreviation expansion, and flow continuation, because
     /// the user already told us a conversion of this word was wrong.
     user_latin_words: HashSet<String>,
+    /// Words the user has explicitly forced to Bulgarian (⌥⌘B). Stored as the
+    /// lowercase *Latin* spelling the user typed. These always convert to
+    /// Cyrillic and establish Bulgarian flow — the mirror image of
+    /// `user_latin_words` — so a word missing from the dictionary
+    /// ("клипчета", "трейлъри") can be taught once instead of editing files.
+    user_bg_words: HashSet<String>,
 
     last_word_language: DetectedLanguage,
     recent_languages: Vec<DetectedLanguage>,
@@ -89,6 +95,7 @@ impl LanguageDetector {
             autocorrect_enabled: false,
             typo_correction_enabled: true,
             user_latin_words: HashSet::new(),
+            user_bg_words: HashSet::new(),
             last_word_language: DetectedLanguage::Uncertain,
             recent_languages: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
             recent_confidences: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
@@ -123,6 +130,29 @@ impl LanguageDetector {
         self.user_latin_words.len()
     }
 
+    /// Remember a word as "always Bulgarian". Stored as the lowercase Latin
+    /// spelling; matching in `process_word` is case-insensitive.
+    pub fn add_user_bg_word(&mut self, word: &str) {
+        let w = word.trim().to_lowercase();
+        if !w.is_empty() {
+            self.user_bg_words.insert(w);
+        }
+    }
+
+    /// Forget a previously forced word. Returns true if it was present.
+    pub fn remove_user_bg_word(&mut self, word: &str) -> bool {
+        self.user_bg_words.remove(&word.trim().to_lowercase())
+    }
+
+    /// Forget all forced-Bulgarian words.
+    pub fn clear_user_bg_words(&mut self) {
+        self.user_bg_words.clear();
+    }
+
+    pub fn user_bg_word_count(&self) -> usize {
+        self.user_bg_words.len()
+    }
+
     pub fn reset_context(&mut self) {
         self.recent_languages.clear();
         self.recent_confidences.clear();
@@ -150,6 +180,22 @@ impl LanguageDetector {
                 original: word.to_string(),
                 converted: word.to_string(),
                 language: DetectedLanguage::Uncertain,
+                confidence: 1.0,
+            };
+        }
+
+        // 0b. Forced-Bulgarian words: the user pressed ⌥⌘B on this word once,
+        // so it always converts to Cyrillic and establishes Bulgarian flow —
+        // the mirror image of the learned-Latin pass-through above. This lets
+        // an out-of-dictionary word be taught without editing any files.
+        if self.user_bg_words.contains(&lower) {
+            let cyrillic = to_cyrillic(word);
+            self.push_context(DetectedLanguage::Bulgarian, 1.0);
+            self.track_latin_word(word);
+            return WordResult {
+                original: word.to_string(),
+                converted: cyrillic,
+                language: DetectedLanguage::Bulgarian,
                 confidence: 1.0,
             };
         }
@@ -752,6 +798,59 @@ mod tests {
         let r = d.process_word("iztire[");
         assert_eq!(r.converted, "изтриеш",
             "typo fix must beat raw cyrillic, got {:?}", r.converted);
+    }
+
+    #[test]
+    fn dictionary_loanword_plurals_convert_not_typo_corrected() {
+        // Regression: "...имат видеа treylyri". Two modern loanword forms that
+        // were missing from the BG dictionary:
+        //   • "видеа" (plural of видео). Typing "videa" maps to "видеа", but
+        //     with it absent the typo-rescuer "fixed" it to the nearest real
+        //     word "видра" (otter). An exact dictionary entry must win outright.
+        //   • "трейлъри". Typed "treylyri" maps to "треълъри" (the user pressed
+        //     'y'→ъ instead of 'j'→й for й); with "трейлъри" in the dictionary
+        //     the typo-fixer recovers it (edit distance 1).
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["имат", "видео", "видеа", "видра", "трейлъри"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        d.process_word("imat"); // имат — establishes BG flow
+
+        let r = d.process_word("videa");
+        assert_eq!(r.converted, "видеа",
+            "exact dict entry must win, not the typo 'видра', got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+
+        let r = d.process_word("treylyri");
+        assert_eq!(r.converted, "трейлъри",
+            "treylyri (треълъри) must typo-fix to трейлъри, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn forced_bg_word_always_converts_and_leads_flow() {
+        // The user pressed ⌥⌘B on "klip`eta" (клипчета) once. It is in NEITHER
+        // dictionary, but the forced set must make it convert verbatim every
+        // time afterwards — even as the first word with no prior context — and
+        // establish Bulgarian flow for what follows.
+        let en: HashSet<String> = ["clip"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["са", "хубави"].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.add_user_bg_word("klip`eta");
+
+        let r = d.process_word("klip`eta");
+        assert_eq!(r.converted, "клипчета",
+            "forced word must convert verbatim, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+
+        // It led the flow, so a following short BG word rides the streak.
+        let r = d.process_word("sa");
+        assert_eq!(r.converted, "са");
+
+        // Case-insensitive and forgettable.
+        assert!(d.remove_user_bg_word("KLIP`ETA"));
+        assert_eq!(d.user_bg_word_count(), 0);
     }
 
     #[test]
