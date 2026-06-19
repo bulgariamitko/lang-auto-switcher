@@ -36,6 +36,24 @@ ENTITLEMENTS="$REPO_ROOT/LangAutoSwitcher/LangAutoSwitcher.entitlements"
 cleanup() { rm -rf "$TMP_BUILD"; }
 trap cleanup EXIT
 
+# Staple with retries — the staple step talks to Apple's CloudKit ticket
+# service and occasionally times out (NSURLErrorTimedOut / "error 68") even
+# though notarization already succeeded. Retry a few times before giving up.
+staple_with_retry() {
+    local target="$1" tries="${2:-5}" i
+    for (( i = 1; i <= tries; i++ )); do
+        if xcrun stapler staple "$target"; then
+            return 0
+        fi
+        if (( i < tries )); then
+            echo "    staple attempt $i/$tries failed (transient?) — retrying in 15s…"
+            sleep 15
+        fi
+    done
+    echo "    staple failed after $tries attempts"
+    return 1
+}
+
 echo "▸ Building v$VERSION (build $BUILD_NUMBER) into $TMP_BUILD"
 cd "$REPO_ROOT"
 rm -f "$FINAL_ZIP"
@@ -98,7 +116,7 @@ echo "▸ Submitting to Apple notary service (blocks until done)"
 xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
 
 echo "▸ Stapling notarization ticket to the app"
-xcrun stapler staple "$APP_PATH"
+staple_with_retry "$APP_PATH"
 
 echo "▸ Final verification via Gatekeeper"
 spctl --assess --type execute --verbose=4 "$APP_PATH" 2>&1 || true
@@ -152,12 +170,24 @@ fi
 ls -lh "$FINAL_ZIP"
 
 # -----------------------------------------------------------------------------
-# Build the user-facing .dmg installer
+# Build the user-facing .dmg installer (BEST-EFFORT)
 # -----------------------------------------------------------------------------
-echo ""
-echo "▸ Building installer .app (AppleScript applet)"
-INSTALLER_NAME="Install LangAutoSwitcher.app"
-INSTALLER_APP="$TMP_BUILD/$INSTALLER_NAME"
+# The zip + appcast above are already final and published-ready. The installer
+# and DMG are a convenience for first-time manual installs, and their notarize
+# / staple steps depend on Apple network services that occasionally time out.
+# Run the whole section in a subshell so a transient failure here degrades to a
+# warning instead of aborting the release — `set -e` stays active *inside* the
+# subshell, so the first real failure stops the DMG build cleanly.
+DMG_NAME="LangAutoSwitcher-v${VERSION}.dmg"
+FINAL_DMG="$REPO_ROOT/$DMG_NAME"
+rm -f "$FINAL_DMG"
+DMG_OK=0
+if (
+    set -e
+    echo ""
+    echo "▸ Building installer .app (AppleScript applet)"
+    INSTALLER_NAME="Install LangAutoSwitcher.app"
+    INSTALLER_APP="$TMP_BUILD/$INSTALLER_NAME"
 osacompile -o "$INSTALLER_APP" "$REPO_ROOT/scripts/install_applet.applescript"
 
 # Embed the stapled LangAutoSwitcher.app inside the installer's Resources.
@@ -197,7 +227,7 @@ xcrun notarytool submit "$INSTALLER_NOTARIZE_ZIP" \
     --keychain-profile "$NOTARY_PROFILE" --wait
 
 echo "    stapling installer"
-xcrun stapler staple "$INSTALLER_APP"
+staple_with_retry "$INSTALLER_APP"
 
 echo ""
 echo "▸ Building DMG with the installer"
@@ -264,13 +294,27 @@ echo "    submitting DMG to notary service"
 xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
 
 echo "    stapling DMG"
-xcrun stapler staple "$DMG_PATH"
+staple_with_retry "$DMG_PATH"
 
 cp "$DMG_PATH" "$FINAL_DMG"
 ls -lh "$FINAL_DMG"
+); then
+    DMG_OK=1
+fi
 
 echo ""
-echo "✓ Release artifacts:"
-echo "    $FINAL_ZIP   (used by Sparkle for auto-update)"
-echo "    $FINAL_DMG   (user-facing first-install download)"
+if [ "$DMG_OK" = "1" ] && [ -f "$FINAL_DMG" ]; then
+    echo "✓ Release artifacts:"
+    echo "    $FINAL_ZIP   (used by Sparkle for auto-update)"
+    echo "    $FINAL_DMG   (user-facing first-install download)"
+else
+    echo "✓ Release artifact (core):"
+    echo "    $FINAL_ZIP   (used by Sparkle for auto-update)"
+    echo ""
+    echo "⚠ The installer DMG was NOT produced (a transient notarize/staple"
+    echo "  failure, e.g. an Apple network timeout). The release itself is fine:"
+    echo "  the zip is notarized + stapled and the appcast is updated. Re-run"
+    echo "  'bash scripts/build_dmg.sh $VERSION' to build and attach the DMG"
+    echo "  later — it does NOT touch the zip or appcast."
+fi
 echo "✓ docs/appcast.xml updated — commit + push so GitHub Pages serves it."
