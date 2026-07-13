@@ -60,6 +60,8 @@ fn default_map_char(c: char) -> Option<char> {
         ']' => 'щ', '[' => 'ш', ';' => 'ж', '\'' => 'ь', '`' => 'ч', '\\' => 'ю',
         // uppercase specials
         '}' => 'Щ', '{' => 'Ш', ':' => 'Ж', '"' => 'Ь', '~' => 'Ч', '|' => 'Ю',
+        // ISO Mac §/± key (top-left, left of 1) — alternate way to type ч/Ч
+        '§' => 'ч', '±' => 'Ч',
         // uppercase letters
         'A' => 'А', 'B' => 'Б', 'C' => 'Ц', 'D' => 'Д', 'E' => 'Е',
         'F' => 'Ф', 'G' => 'Г', 'H' => 'Х', 'I' => 'И', 'J' => 'Й',
@@ -81,7 +83,8 @@ pub fn to_cyrillic(text: &str) -> String {
 fn is_mappable_special(c: char) -> bool {
     matches!(c,
         ']' | '[' | ';' | '\'' | '`' | '\\' |
-        '}' | '{' | ':' | '"' | '~' | '|'
+        '}' | '{' | ':' | '"' | '~' | '|' |
+        '§' | '±'
     )
 }
 
@@ -106,8 +109,8 @@ pub fn latin_key_for_cyrillic(c: char) -> Option<char> {
 }
 
 /// True if the word contains a key that exists *only* to type a Cyrillic
-/// letter. The bracket / backslash / backtick / brace / pipe / tilde keys map
-/// to щ ш ч ю and never appear inside a real Latin word — so a word containing
+/// letter. The bracket / backslash / backtick / brace / pipe / tilde / §± keys
+/// map to щ ш ч ю and never appear inside a real Latin word — so a word containing
 /// one is a strong signal the user is typing Bulgarian, even when the result
 /// isn't in the dictionary (e.g. "превютата", a colloquial loanword).
 ///
@@ -117,7 +120,7 @@ pub fn latin_key_for_cyrillic(c: char) -> Option<char> {
 #[inline]
 pub fn contains_cyrillic_only_key(word: &str) -> bool {
     word.chars().any(|c| matches!(c,
-        '[' | ']' | '`' | '\\' | '{' | '}' | '~' | '|'
+        '[' | ']' | '`' | '\\' | '{' | '}' | '~' | '|' | '§' | '±'
     ))
 }
 
@@ -148,6 +151,10 @@ mod tests {
         assert_eq!(map_char('['), Some('ш'));
         assert_eq!(map_char('`'), Some('ч'));
         assert_eq!(map_char('\\'), Some('ю'));
+        // ISO Mac §/± key is an alternate ч/Ч (top-left key, left of 1)
+        assert_eq!(map_char('§'), Some('ч'));
+        assert_eq!(map_char('±'), Some('Ч'));
+        assert!(contains_cyrillic_only_key("§асовник"));
     }
 
     #[test]

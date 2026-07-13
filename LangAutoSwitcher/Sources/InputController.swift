@@ -179,7 +179,9 @@ class InputController: IMKInputController {
         // Characters that map to Cyrillic should be buffered
         let mappableChars: Set<Character> = [
             "]", "[", ";", "'", "`", "\\",
-            "}", "{", ":", "\"", "~", "|"
+            "}", "{", ":", "\"", "~", "|",
+            // ISO Mac §/± key (top-left, left of 1) — alternate ч/Ч
+            "§", "±"
         ]
         // Email/URL/path chars — buffer them so we can detect emails/URLs and keep them Latin
         let emailUrlChars: Set<Character> = [".", "@", "-", "_", "/", "+"]
