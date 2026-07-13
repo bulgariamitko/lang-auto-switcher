@@ -675,5 +675,42 @@ LangAutoSwitcher не прихваща клавиши там — просто п
                 type="application/octet-stream"
                 sparkle:edSignature="UpEfigcQHsMiGZo7/UjL1HJpmNm6BdWso9htN5tWZUQarkCLy7RmdHo/ZXrTjWe+6DTC2bbiYEIHpMeK6wz6Ag==" />
         </item>
+        <item>
+            <title>Version 2.8.3</title>
+            <pubDate>Mon, 13 Jul 2026 06:12:11 GMT</pubDate>
+            <sparkle:version>20803</sparkle:version>
+            <sparkle:shortVersionString>2.8.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  kbd { font-family: ui-monospace, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+
+<h2>v2.8.3 — Клавишът <kbd>§</kbd> вече пише „ч“</h2>
+
+<h3>Горният ляв клавиш <kbd>§</kbd> е още един начин да напишеш „ч“</h3>
+<p>На ISO клавиатурите на Mac клавишът <kbd>§</kbd> (горе вляво, вляво от
+<kbd>1</kbd>) досега си оставаше „§“ и трябваше да се пренарежда с външни
+трикове (hidutil), които се чупеха при всяко рестартиране или обновяване на
+macOS. Сега <kbd>§</kbd> се преобразува направо в „<b>ч</b>“ вътре в самия метод
+за вход — например „§асовник“ става „<b>часовник</b>“. С <kbd>⇧</kbd> клавишът
+дава „<b>Ч</b>“ (<kbd>±</kbd> → Ч).</p>
+<p>Работи като клавиша <kbd>`</kbd> — двата водят до „ч“ — и се брои за силен
+знак, че думата е на български, точно както скобите и наклонената черта.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.8.3/LangAutoSwitcher-v2.8.3.zip"
+                length="3917063"
+                type="application/octet-stream"
+                sparkle:edSignature="cDcMv0v1nj7eexA9+YcAB4OYUZCBdZejio8omV4EpunQ1pq5ypczQS3WCX0ot6OHmM+TUzpXNOTCyITe+JGUBQ==" />
+        </item>
     </channel>
 </rss>
