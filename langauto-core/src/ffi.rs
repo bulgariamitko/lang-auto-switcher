@@ -200,6 +200,64 @@ pub unsafe extern "C" fn langauto_detector_process_word(
     rust_to_c_string(&result.converted)
 }
 
+/// Resolve a held-back word using the word on each side of it. Decides
+/// `pending` with `next` as a right-hand hint, then decides `next` with
+/// `pending` in context. Returns the converted `pending` text (caller must
+/// free with `langauto_string_free`) and writes the converted `next` text to
+/// `out_next` (also caller-freed) plus `next`'s language/confidence.
+///
+/// # Safety
+/// `d`, `pending` and `next` must be valid. The `out_*` pointers may be null.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_resolve_pending(
+    d: *mut LangAutoDetector,
+    pending: *const c_char,
+    next: *const c_char,
+    out_pending_lang: *mut c_int,
+    out_next: *mut *mut c_char,
+    out_next_lang: *mut c_int,
+    out_next_conf: *mut f64,
+) -> *mut c_char {
+    if d.is_null() {
+        return ptr::null_mut();
+    }
+    let detector = &mut (*d).inner;
+    let (p, n) = match (c_to_rust_str(pending), c_to_rust_str(next)) {
+        (Some(p), Some(n)) => (p, n),
+        _ => return ptr::null_mut(),
+    };
+    let (pending_result, next_result) = detector.resolve_pending(p, n);
+    if !out_pending_lang.is_null() {
+        *out_pending_lang = lang_to_int(pending_result.language);
+    }
+    if !out_next.is_null() {
+        *out_next = rust_to_c_string(&next_result.converted);
+    }
+    if !out_next_lang.is_null() {
+        *out_next_lang = lang_to_int(next_result.language);
+    }
+    if !out_next_conf.is_null() {
+        *out_next_conf = next_result.confidence;
+    }
+    rust_to_c_string(&pending_result.converted)
+}
+
+/// 1 when the word immediately to the left was pinned by an exact hit in
+/// exactly one dictionary — i.e. looking ahead cannot add anything, so the
+/// caller need not hold the current word back.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_last_context_is_decisive(
+    d: *mut LangAutoDetector,
+) -> c_int {
+    if d.is_null() {
+        return 0;
+    }
+    if (*d).inner.last_context_is_decisive() { 1 } else { 0 }
+}
+
 /// Reset all context (no recent words, no streak). Use at sentence boundaries
 /// or when the user moves the cursor far away.
 ///

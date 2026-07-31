@@ -80,6 +80,23 @@ pub struct LanguageDetector {
     recent_languages: Vec<DetectedLanguage>,
     recent_confidences: Vec<f64>,
     recent_latin_words: Vec<String>,
+
+    /// Language of the word to the RIGHT, when the caller has already seen it
+    /// (see `resolve_pending`). Only set for the duration of a single
+    /// `process_word` call. An ambiguous word consults this before any
+    /// left-hand signal, because the caller only holds a word when the left
+    /// side was inconclusive in the first place.
+    right_hint: Option<DetectedLanguage>,
+}
+
+/// Frozen copy of the rolling context, so a word can be classified as a
+/// look-ahead peek and then un-done. See `LanguageDetector::snapshot`.
+#[derive(Clone)]
+pub struct ContextSnapshot {
+    last_word_language: DetectedLanguage,
+    recent_languages: Vec<DetectedLanguage>,
+    recent_confidences: Vec<f64>,
+    recent_latin_words: Vec<String>,
 }
 
 impl LanguageDetector {
@@ -100,6 +117,7 @@ impl LanguageDetector {
             recent_languages: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
             recent_confidences: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
             recent_latin_words: Vec::with_capacity(RECENT_WORDS_MAX),
+            right_hint: None,
         }
     }
 
@@ -158,6 +176,68 @@ impl LanguageDetector {
         self.recent_confidences.clear();
         self.recent_latin_words.clear();
         self.last_word_language = DetectedLanguage::Uncertain;
+    }
+
+    /// True when the word immediately to the left was pinned by an exact hit
+    /// in exactly ONE dictionary. The caller uses this to decide whether it
+    /// needs to wait for the right-hand word at all: when the left side is
+    /// this decisive there is nothing a look-ahead could add, so the word can
+    /// commit immediately with no visible delay.
+    pub fn last_context_is_decisive(&self) -> bool {
+        self.last_word_language != DetectedLanguage::Uncertain && self.last_confidence() >= 1.0
+    }
+
+    fn snapshot(&self) -> ContextSnapshot {
+        ContextSnapshot {
+            last_word_language: self.last_word_language,
+            recent_languages: self.recent_languages.clone(),
+            recent_confidences: self.recent_confidences.clone(),
+            recent_latin_words: self.recent_latin_words.clone(),
+        }
+    }
+
+    fn restore(&mut self, s: ContextSnapshot) {
+        self.last_word_language = s.last_word_language;
+        self.recent_languages = s.recent_languages;
+        self.recent_confidences = s.recent_confidences;
+        self.recent_latin_words = s.recent_latin_words;
+    }
+
+    /// Decide a held-back word using the words on BOTH sides of it.
+    ///
+    /// The caller holds `pending` (typically ambiguous, with no decisive left
+    /// neighbour), then hands it back together with the `next` word the user
+    /// went on to type. Ordering matters, so this runs in three steps:
+    ///
+    ///   1. Classify `next` as a throw-away peek and rewind the context, so
+    ///      looking ahead leaves no trace.
+    ///   2. Decide `pending` for real, with that peek as a right-hand hint —
+    ///      this is the "look left and right" decision.
+    ///   3. Decide `next` for real, now that `pending` sits in the context
+    ///      where it belongs.
+    ///
+    /// Returns both results in the order they should be inserted. Step 2 is
+    /// also what keeps the context honest: the older code committed the held
+    /// word straight to the screen without ever telling the detector about it,
+    /// so a held word was invisible to everything that followed.
+    pub fn resolve_pending(&mut self, pending: &str, next: &str) -> (WordResult, WordResult) {
+        let snap = self.snapshot();
+        let peek = self.process_word(next);
+        self.restore(snap);
+
+        // A peek only steers the decision when it is confident in a language.
+        // An Uncertain or low-confidence neighbour (an unknown word, a brand,
+        // a number) leaves `pending` to the normal left-hand logic.
+        self.right_hint = match peek.language {
+            DetectedLanguage::Uncertain => None,
+            lang if peek.confidence >= 0.9 => Some(lang),
+            _ => None,
+        };
+        let pending_result = self.process_word(pending);
+        self.right_hint = None;
+
+        let next_result = self.process_word(next);
+        (pending_result, next_result)
     }
 
     pub fn process_word(&mut self, word: &str) -> WordResult {
@@ -263,18 +343,24 @@ impl LanguageDetector {
                 confidence = 1.0;
             }
         } else if is_english && !is_bulgarian {
-            if self.last_word_language == DetectedLanguage::Bulgarian
-                && streak_len >= 3
-                && lower.chars().count() <= 3
-            {
-                detected = DetectedLanguage::Bulgarian;
-                output = cyrillic.clone();
-                confidence = 0.6;
-            } else {
-                detected = DetectedLanguage::English;
-                output = word.to_string();
-                confidence = 1.0;
-            }
+            // A real English word whose Cyrillic form is NOT in the Bulgarian
+            // dictionary. There used to be a "short word mid-BG-streak rides
+            // the flow" exception here, mirroring the branch above, but in
+            // THIS direction the branch condition guarantees the flip produces
+            // a non-word: `!is_bulgarian` means `cyrillic` was already looked
+            // up and missed. It turned "we will order only" typed after a
+            // Bulgarian sentence into "ве will ордер only" — "ве" is not a
+            // word in any language.
+            //
+            // The mirror branch (BG-only word mid-EN-streak stays Latin) is
+            // kept, because its output is still the Latin word the user typed
+            // and the EN dictionary is Scrabble-derived, so it genuinely
+            // misses ordinary English tokens ("ok", brands). The 234k-entry,
+            // fully-inflected BG dictionary has no such excuse: a miss there
+            // really does mean "not a Bulgarian word".
+            detected = DetectedLanguage::English;
+            output = word.to_string();
+            confidence = 1.0;
         } else {
             // In NEITHER dictionary. Latin is the default: we don't recognise
             // the word in either language, so we never guess a Cyrillic
@@ -434,6 +520,42 @@ impl LanguageDetector {
     }
 
     fn resolve_ambiguous(&self, word: &str, cyrillic: &str) -> (DetectedLanguage, String, f64) {
+        // The word to the RIGHT wins first when the caller looked ahead for
+        // us. We only ever get a hint because the caller judged the left side
+        // inconclusive and held this word back, so the neighbour it found is
+        // the best evidence available — "лаптоп" vs "laptop" is settled by the
+        // company the word keeps, in whichever direction that company sits.
+        if let Some(hint) = self.right_hint {
+            match hint {
+                DetectedLanguage::Bulgarian => {
+                    return (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.9)
+                }
+                DetectedLanguage::English => {
+                    return (DetectedLanguage::English, word.to_string(), 0.9)
+                }
+                DetectedLanguage::Uncertain => {}
+            }
+        }
+
+        // The word immediately before wins outright when it was decided by an
+        // exact hit in exactly ONE dictionary (confidence 1.0) — that is the
+        // strongest signal we ever record, and it is fresher than the 6-word
+        // majority. Without this, an English phrase started mid-Bulgarian-text
+        // ("…този имейл we will order only") lost every ambiguous word back to
+        // the trailing Bulgarian majority: "order" came out "ордер" even
+        // though the preceding "will" was unambiguously English.
+        if self.last_confidence() >= 1.0 {
+            match self.last_word_language {
+                DetectedLanguage::Bulgarian => {
+                    return (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.9)
+                }
+                DetectedLanguage::English => {
+                    return (DetectedLanguage::English, word.to_string(), 0.9)
+                }
+                DetectedLanguage::Uncertain => {}
+            }
+        }
+
         let dominant = self.dominant_recent_language();
         if dominant == DetectedLanguage::Bulgarian {
             return (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.9);
@@ -506,6 +628,13 @@ impl LanguageDetector {
             DetectedLanguage::Bulgarian => (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.3),
             _ => (DetectedLanguage::English, word.to_string(), 0.3),
         }
+    }
+
+    /// Confidence of the most recent decided (non-Uncertain) word; 0.0 when
+    /// nothing has been decided yet. Pairs with `last_word_language`, which
+    /// `push_context` keeps in step with the tail of `recent_confidences`.
+    fn last_confidence(&self) -> f64 {
+        self.recent_confidences.last().copied().unwrap_or(0.0)
     }
 
     fn dominant_recent_language(&self) -> DetectedLanguage {
@@ -1124,6 +1253,192 @@ mod tests {
 
         let r = d.process_word("w");
         assert_eq!(r.converted, "w");
+    }
+
+    #[test]
+    fn english_phrase_after_a_bulgarian_sentence_stays_english() {
+        // Real user report: after typing a Bulgarian sentence ("…не мога да
+        // отговоря на този имейл") the user continued in English with
+        // "we will order only" and got back "ве will ордер only".
+        //
+        // Two separate rules combined to produce it:
+        //   • "we" is EN-only, but a short word mid-BG-streak used to flip to
+        //     Cyrillic — producing "ве", which is not a word in any language.
+        //   • "order" is in BOTH dictionaries ("ордер" is a real BG noun), and
+        //     resolve_ambiguous consulted the 6-word majority (still Bulgarian)
+        //     before the immediately preceding "will", which was an
+        //     unambiguous English hit.
+        let en: HashSet<String> = ["we", "will", "order", "only"]
+            .iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["не", "мога", "да", "отговоря", "на", "този", "имейл", "ордер"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        // Establish a long, high-confidence Bulgarian streak.
+        for (latin, cyr) in [
+            ("ne", "не"), ("moga", "мога"), ("da", "да"), ("otgoworq", "отговоря"),
+            ("na", "на"), ("tozi", "този"), ("imejl", "имейл"),
+        ] {
+            let r = d.process_word(latin);
+            assert_eq!(r.converted, cyr, "setup word {latin:?} should convert");
+            assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        }
+
+        // The English phrase must come through verbatim.
+        let mut out = Vec::new();
+        for word in ["we", "will", "order", "only"] {
+            let r = d.process_word(word);
+            assert_eq!(r.language, DetectedLanguage::English,
+                "{word:?} should be English, got {:?}", r.language);
+            out.push(r.converted);
+        }
+        assert_eq!(out.join(" "), "we will order only");
+    }
+
+    #[test]
+    fn en_only_word_never_flips_to_a_cyrillic_non_word() {
+        // Narrow guard for the first half of the bug above: when a word is in
+        // the EN dictionary and its transliteration is NOT in the BG one, the
+        // BG form is by construction a non-word, so no streak — however long —
+        // may flip it. ("we" → "ве")
+        let en: HashSet<String> = ["we"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["много", "хубаво", "нали", "това", "е"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        for w in ["towa", "e", "mnogo", "hubawo", "nali"] {
+            d.process_word(w);
+        }
+
+        let r = d.process_word("we");
+        assert_eq!(r.converted, "we",
+            "EN-only short word must not flip to the non-word 'ве', got {:?}", r.converted);
+        assert_ne!(r.converted, "ве");
+        assert_eq!(r.language, DetectedLanguage::English);
+    }
+
+    #[test]
+    fn decisive_previous_word_beats_the_recent_majority() {
+        // Second half of the bug, in isolation and in BOTH directions: an
+        // ambiguous word (in both dictionaries) follows the language of the
+        // word right before it when that word was an exact single-dictionary
+        // hit, even while the 6-word window still leans the other way.
+        let en: HashSet<String> = ["will", "order", "so"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["ордер", "со", "много", "хубаво", "нали", "това", "е"]
+            .iter().map(|s| s.to_string()).collect();
+
+        // BG majority, decisive EN word right before → English.
+        let mut d = LanguageDetector::new(en.clone(), bg.clone());
+        for w in ["towa", "e", "mnogo", "hubawo", "nali"] {
+            d.process_word(w);
+        }
+        assert_eq!(d.process_word("will").language, DetectedLanguage::English);
+        let r = d.process_word("order");
+        assert_eq!(r.converted, "order",
+            "decisive English predecessor must win over the BG majority, got {:?}", r.converted);
+
+        // Mirror: EN majority, decisive BG word right before → Bulgarian.
+        let mut d = LanguageDetector::new(en, bg);
+        for w in ["will", "will", "will"] {
+            d.process_word(w);
+        }
+        assert_eq!(d.process_word("mnogo").converted, "много");
+        let r = d.process_word("order");
+        assert_eq!(r.converted, "ордер",
+            "decisive Bulgarian predecessor must win over the EN majority, got {:?}", r.converted);
+    }
+
+    #[test]
+    fn pending_word_is_decided_by_the_word_on_its_right() {
+        // "laptop"/"лаптоп" is a real word in both languages, so with nothing
+        // decisive on the left the word that FOLLOWS it casts the deciding
+        // vote — in both directions.
+        let en: HashSet<String> = ["laptop", "is", "broken"]
+            .iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["лаптоп", "работи", "добре"]
+            .iter().map(|s| s.to_string()).collect();
+
+        // Followed by an English word → stays Latin.
+        let mut d = LanguageDetector::new(en.clone(), bg.clone());
+        let (p, n) = d.resolve_pending("laptop", "is");
+        assert_eq!(p.converted, "laptop",
+            "English neighbour should keep it Latin, got {:?}", p.converted);
+        assert_eq!(p.language, DetectedLanguage::English);
+        assert_eq!(n.converted, "is");
+
+        // Followed by a Bulgarian word → converts.
+        let mut d = LanguageDetector::new(en, bg);
+        let (p, n) = d.resolve_pending("laptop", "raboti");
+        assert_eq!(p.converted, "лаптоп",
+            "Bulgarian neighbour should convert it, got {:?}", p.converted);
+        assert_eq!(p.language, DetectedLanguage::Bulgarian);
+        assert_eq!(n.converted, "работи");
+    }
+
+    #[test]
+    fn resolved_pending_word_enters_the_context() {
+        // Regression: the held word used to be written straight to the screen
+        // without ever being fed to the detector, so it was invisible to every
+        // word after it. Here "laptop" resolves to Bulgarian via "работи";
+        // the NEXT word must then see a Bulgarian context.
+        let en: HashSet<String> = ["laptop"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["лаптоп", "работи", "добре"]
+            .iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        let (p, _) = d.resolve_pending("laptop", "raboti");
+        assert_eq!(p.converted, "лаптоп");
+
+        // Two BG words are now in the window, so the streak is real.
+        assert_eq!(d.consecutive_streak_length(), 2,
+            "both resolved words must be in the context");
+        let r = d.process_word("dobre");
+        assert_eq!(r.converted, "добре");
+        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+    }
+
+    #[test]
+    fn look_ahead_peek_leaves_no_trace() {
+        // The peek at the right-hand word must be rewound: the next word may
+        // only appear ONCE in the context, not twice.
+        let en: HashSet<String> = ["laptop"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["лаптоп", "работи"].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        d.resolve_pending("laptop", "raboti");
+        assert_eq!(d.recent_languages.len(), 2,
+            "exactly two words were typed; the peek must not leave a third");
+        assert_eq!(d.recent_latin_words, vec!["laptop".to_string(), "raboti".to_string()]);
+    }
+
+    #[test]
+    fn decisive_left_context_needs_no_look_ahead() {
+        // The controller only holds a word when the left side is inconclusive.
+        // An exact single-dictionary hit makes it conclusive.
+        let en: HashSet<String> = ["will", "order"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["ордер", "много"].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+        assert!(!d.last_context_is_decisive(), "no context yet is not decisive");
+
+        d.process_word("will"); // EN-only exact hit
+        assert!(d.last_context_is_decisive());
+
+        d.process_word("qqqq"); // unknown → Uncertain, context untouched
+        assert!(d.last_context_is_decisive(), "a pass-through word leaves the left signal intact");
+    }
+
+    #[test]
+    fn uncertain_neighbour_does_not_steer_the_pending_word() {
+        // If the word to the right is itself unknown (a brand, a number),
+        // it must not vote — the pending word falls back to normal handling
+        // and the default language decides.
+        let en: HashSet<String> = ["laptop"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["лаптоп"].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        let (p, n) = d.resolve_pending("laptop", "Zyxwv");
+        assert_eq!(n.language, DetectedLanguage::Uncertain,
+            "the neighbour really is unknown");
+        assert_eq!(p.converted, "laptop",
+            "unknown neighbour must not force a conversion, got {:?}", p.converted);
     }
 
     #[test]

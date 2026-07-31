@@ -196,6 +196,15 @@ final class LanguageDetector {
         return langauto_detector_is_first_word(ptr) == 1
     }
 
+    /// True when the word to the left was pinned by an exact hit in exactly
+    /// one dictionary. `InputController` uses this to decide whether an
+    /// ambiguous word needs to wait for the word on its right: when the left
+    /// side is already this decisive, waiting would only add a visible delay.
+    var lastContextIsDecisive: Bool {
+        guard let ptr = ptr else { return false }
+        return langauto_detector_last_context_is_decisive(ptr) == 1
+    }
+
     /// (english, bulgarian) dictionary entry counts — shown in Diagnostics.
     var dictionaryCounts: (en: Int, bg: Int) {
         guard let ptr = ptr else { return (0, 0) }
@@ -364,6 +373,54 @@ final class LanguageDetector {
             converted: converted,
             language: DetectedLanguage.fromInt(outLang),
             confidence: outConf
+        )
+    }
+
+    /// Decide a held-back word using the words on both sides of it, then
+    /// decide the word that followed. Returns both in insertion order.
+    ///
+    /// Falls back to plain sequential processing in pass-through mode or if
+    /// the core hands back a null string.
+    func resolvePending(_ pending: String, next: String) -> (pending: WordResult, next: WordResult) {
+        guard let ptr = ptr else {
+            return (WordResult(original: pending, converted: pending, language: .uncertain, confidence: 0),
+                    WordResult(original: next, converted: next, language: .uncertain, confidence: 0))
+        }
+
+        var pendingLang: Int32 = LANGAUTO_LANG_UNCERTAIN
+        var nextOut: UnsafeMutablePointer<CChar>? = nil
+        var nextLang: Int32 = LANGAUTO_LANG_UNCERTAIN
+        var nextConf: Double = 0
+
+        let pendingConverted: String? = pending.withCString { pStr in
+            next.withCString { nStr in
+                guard let out = langauto_detector_resolve_pending(
+                    ptr, pStr, nStr, &pendingLang, &nextOut, &nextLang, &nextConf
+                ) else { return nil }
+                defer { langauto_string_free(out) }
+                return String(cString: out)
+            }
+        }
+
+        guard let pendingConverted = pendingConverted else {
+            // Core declined — keep the old sequential behaviour rather than
+            // dropping either word.
+            return (processWord(pending), processWord(next))
+        }
+
+        let nextConverted: String
+        if let nextOut = nextOut {
+            nextConverted = String(cString: nextOut)
+            langauto_string_free(nextOut)
+        } else {
+            nextConverted = next
+        }
+
+        return (
+            WordResult(original: pending, converted: pendingConverted,
+                       language: DetectedLanguage.fromInt(pendingLang), confidence: 0),
+            WordResult(original: next, converted: nextConverted,
+                       language: DetectedLanguage.fromInt(nextLang), confidence: nextConf)
         )
     }
 

@@ -60,6 +60,21 @@ char* langauto_detector_process_word(LangAutoDetector* d,
                                      int* out_lang,
                                      double* out_conf);
 
+// Resolve a word that was held back, using the words on BOTH sides of it.
+// Returns the converted `pending` text (caller frees); writes the converted
+// `next` text to *out_next (caller frees) plus next's language/confidence.
+char* langauto_detector_resolve_pending(LangAutoDetector* d,
+                                        const char* pending,
+                                        const char* next,
+                                        int* out_pending_lang,
+                                        char** out_next,
+                                        int* out_next_lang,
+                                        double* out_next_conf);
+
+// 1 when the word to the left was pinned by an exact hit in exactly one
+// dictionary, so holding the current word back would gain nothing.
+int  langauto_detector_last_context_is_decisive(LangAutoDetector* d);
+
 void langauto_detector_reset_context(LangAutoDetector* d);
 int  langauto_detector_is_first_word(LangAutoDetector* d);
 

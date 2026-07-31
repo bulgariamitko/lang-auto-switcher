@@ -355,18 +355,16 @@ class InputController: IMKInputController {
         let isBulgarian = detector.bgDictionary.contains(cyrillicLower)
         let isAmbiguous = isEnglish && isBulgarian
 
-        if pendingWord != nil {
-            let secondResult = detector.processWord(word)
-            let pendingCyrillic = PhoneticMapper.toCyrillic(pendingWord!)
-            let pendingOutput: String
-            if secondResult.language == .bulgarian {
-                pendingOutput = pendingCyrillic
-            } else {
-                pendingOutput = pendingWord!
-            }
+        if let pending = pendingWord {
+            // Decide the held word using BOTH neighbours, then the current
+            // word with the held one in context. The core does the ordering.
+            let resolved = detector.resolvePending(pending, next: word)
+            let pendingOutput = resolved.pending.converted
+            let secondResult = resolved.next
 
-            NSLog("LangAutoSwitcher: pending '%@' → '%@' (resolved by '%@'→'%@' [%@])",
-                  pendingWord!, pendingOutput, word, secondResult.converted, secondResult.language.rawValue)
+            NSLog("LangAutoSwitcher: pending '%@' → '%@' [%@] (resolved by '%@'→'%@' [%@])",
+                  pending, pendingOutput, resolved.pending.language.rawValue,
+                  word, secondResult.converted, secondResult.language.rawValue)
 
             let fullText = pendingOutput + " " + secondResult.converted + trailing
             client.insertText(fullText,
@@ -375,12 +373,20 @@ class InputController: IMKInputController {
             if secondResult.converted != word {
                 recordConversion(original: word, converted: secondResult.converted)
             } else {
-                recordConversion(original: pendingWord!, converted: pendingOutput)
+                recordConversion(original: pending, converted: pendingOutput)
             }
             pendingWord = nil
 
-        } else if isAmbiguous && detector.isFirstWord {
-            // First word, ambiguous — hold it. Reattach trailing to buffer for later.
+        } else if isAmbiguous && !detector.lastContextIsDecisive {
+            // Ambiguous (a real word in both languages) AND the word on the
+            // left didn't settle it — "laptop"/"лаптоп" is the canonical case.
+            // Hold it and let the word on the right cast the deciding vote.
+            //
+            // Deliberately NOT held when the left neighbour was an exact
+            // single-dictionary hit: that is already the strongest signal we
+            // record, so waiting would add a visible delay and change nothing.
+            // In practice this holds roughly 1 word in 20 rather than the
+            // 1 in 5 that "hold every ambiguous word" would cost.
             pendingWord = word
             // If there's trailing punctuation, we can't hold — force commit
             if !trailing.isEmpty {
@@ -421,10 +427,12 @@ class InputController: IMKInputController {
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
                 recordConversion(original: pending, converted: result.converted)
             } else {
-                // Pending + space + current word
-                let secondResult = detector.processWord(currentWord)
-                let pendingCyrillic = PhoneticMapper.toCyrillic(pending)
-                let pendingOutput = secondResult.language == .bulgarian ? pendingCyrillic : pending
+                // Pending + space + current word. The buffered word is the
+                // right-hand neighbour we were waiting for, so resolve the
+                // pair the same way the normal path does.
+                let resolved = detector.resolvePending(pending, next: currentWord)
+                let pendingOutput = resolved.pending.converted
+                let secondResult = resolved.next
                 let fullText = pendingOutput + " " + secondResult.converted
                 client.insertText(fullText,
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
