@@ -712,5 +712,59 @@ macOS. Сега <kbd>§</kbd> се преобразува направо в „<
                 type="application/octet-stream"
                 sparkle:edSignature="cDcMv0v1nj7eexA9+YcAB4OYUZCBdZejio8omV4EpunQ1pq5ypczQS3WCX0ot6OHmM+TUzpXNOTCyITe+JGUBQ==" />
         </item>
+        <item>
+            <title>Version 2.8.4</title>
+            <pubDate>Fri, 31 Jul 2026 07:51:54 GMT</pubDate>
+            <sparkle:version>20804</sparkle:version>
+            <sparkle:shortVersionString>2.8.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  kbd { font-family: ui-monospace, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+
+<h2>v2.8.4 — Английски след български текст вече не се обръща</h2>
+
+<h3>„we will order only“ вече си остава на английски</h3>
+<p>Ако напишеш български изречение и веднага след него продължиш на английски,
+досега началото на английската част се обръщаше към кирилица: „we will order
+only“ излизаше като „<b>ве will ордер only</b>“. Две правила се събираха и
+причиняваха това — къса английска дума насред българска поредица се обръщаше
+към кирилица, дори когато резултатът („ве“) не е дума на никакъв език, а при
+дума, която съществува и на двата езика („order“ / „ордер“), надделяваше
+мнозинството от последните шест думи вместо думата непосредствено преди нея.
+Сега и двете са поправени и изречението излиза така, както е написано.</p>
+
+<h3>Думите, които се пишат и на двата езика, се решават по съседите отляво <em>и</em> отдясно</h3>
+<p>Думи като „laptop“ / „лаптоп“ и „internet“ / „интернет“ са истински думи и на
+двата езика, така че само предходната дума не стига, за да се реши коя е вярната.
+Сега такава дума изчаква и следващата дума, и чак тогава се решава — по
+компанията, в която се намира:</p>
+<ul>
+  <li>„iskam da kupq now laptop“ → „искам да купя нов <b>лаптоп</b>“</li>
+  <li>„we will order only the new laptop“ → „we will order only the new <b>laptop</b>“</li>
+</ul>
+<p>Изчакването е само за една дума и се случва рядко — когато думата преди нея
+вече е решила въпроса, изобщо няма забавяне.</p>
+
+<h3>Добавени думи в речника</h3>
+<p>„laptop“, „internet“, „modem“ и „blog“ липсваха в английския речник, макар че
+съществуват и като български заемки. Досега се обръщаха към кирилица без да
+питат контекста; сега се решават по съседните думи като всички останали.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.8.4/LangAutoSwitcher-v2.8.4.zip"
+                length="3921891"
+                type="application/octet-stream"
+                sparkle:edSignature="wLn83Fn7vXDSZW3NghcK0FhbbY/M1hXfIYlp5QItFK6OGwIrBENrnYO+dVQfP8tXAQ0eaHpVR1905roUtjAaCQ==" />
+        </item>
     </channel>
 </rss>
