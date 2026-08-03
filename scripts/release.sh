@@ -33,8 +33,91 @@ IDENTITY="Developer ID Application: Dimitar Klaturov (75668RQCMG)"
 NOTARY_PROFILE="langauto-notary"
 ENTITLEMENTS="$REPO_ROOT/LangAutoSwitcher/LangAutoSwitcher.entitlements"
 
+PROJECT_YML="$REPO_ROOT/project.yml"
+PBXPROJ="$REPO_ROOT/LangAutoSwitcher.xcodeproj/project.pbxproj"
+XCODEPROJ_DIR="$REPO_ROOT/LangAutoSwitcher.xcodeproj"
+
 cleanup() { rm -rf "$TMP_BUILD"; }
 trap cleanup EXIT
+
+# ---- version helpers ---------------------------------------------------------
+
+project_yml_version() {
+    /usr/bin/sed -n 's/^ *MARKETING_VERSION: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$PROJECT_YML" | head -1
+}
+project_yml_build() {
+    /usr/bin/sed -n 's/^ *CURRENT_PROJECT_VERSION: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$PROJECT_YML" | head -1
+}
+# First MARKETING_VERSION in a .pbxproj (all targets share one value here).
+pbxproj_version() {
+    /usr/bin/grep -m1 -o 'MARKETING_VERSION = [^;]*;' "$1" 2>/dev/null \
+        | /usr/bin/sed 's/.*= *//; s/;$//'
+}
+
+# Names of Dropbox's "conflicted copy" duplicates of the project file, if any.
+list_conflicted_copies() {
+    /usr/bin/find "$XCODEPROJ_DIR" -maxdepth 1 -name '*conflicted copy*' 2>/dev/null
+}
+
+# Delete them. They are never wanted: project.pbxproj is generated from
+# project.yml, so the authoritative content is always one `xcodegen generate`
+# away and a file Dropbox invented is never worth trusting.
+remove_conflicted_copies() {
+    local f
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        echo "    removing Dropbox cruft: $(basename "$f")"
+        rm -f "$f"
+    done < <(list_conflicted_copies)
+}
+
+# Run xcodegen and make the result stick, despite Dropbox.
+#
+# This repo lives inside Dropbox (File Provider). `xcodegen generate` rewrites
+# project.pbxproj in place, which races Dropbox's sync daemon: Dropbox can
+# decide the rewrite conflicts with the copy it is holding, put the OLD content
+# back into project.pbxproj, and park xcodegen's fresh output next to it as
+# "project (<user>'s conflicted copy <date>).pbxproj".
+#
+# The shipped binary is unaffected — MARKETING_VERSION is forced on the
+# xcodebuild line — but the repo would be left claiming the previous version
+# while shipping the new one. That happened silently during the v2.8.4 build.
+#
+# So: generate, wait for Dropbox to make its move, verify the version actually
+# landed, and retry. We re-generate from project.yml rather than promoting a
+# conflicted copy, so we never have to trust a file Dropbox invented.
+generate_project() {
+    local attempt got
+    for attempt in 1 2 3; do
+        remove_conflicted_copies
+        xcodegen generate
+
+        # Dropbox reconciles asynchronously; a clobber lands a beat later.
+        sleep 3
+
+        got="$(pbxproj_version "$PBXPROJ")"
+        if [ "$got" = "$VERSION" ]; then
+            # The version landed. Any duplicate Dropbox spawned alongside it is
+            # now just cruft — drop it so it can't be committed by accident.
+            remove_conflicted_copies
+            if [ "$attempt" -gt 1 ]; then
+                echo "    project file settled on attempt $attempt"
+            fi
+            return 0
+        fi
+
+        echo "    project.pbxproj says '${got:-<none>}', expected '$VERSION' —" \
+             "Dropbox clobbered it (attempt $attempt/3)"
+        sleep 5
+    done
+
+    echo ""
+    echo "error: could not get project.pbxproj to hold v$VERSION."
+    echo "       Dropbox keeps reverting it. Pause Dropbox syncing and re-run,"
+    echo "       or run 'xcodegen generate' by hand and check:"
+    echo "         grep MARKETING_VERSION '$PBXPROJ'"
+    exit 1
+}
 
 # Staple with retries — the staple step talks to Apple's CloudKit ticket
 # service and occasionally times out (NSURLErrorTimedOut / "error 68") even
@@ -59,8 +142,31 @@ cd "$REPO_ROOT"
 rm -f "$FINAL_ZIP"
 xattr -cr LangAutoSwitcher.xcodeproj 2>/dev/null || true
 
+echo "▸ Pinning project.yml to v$VERSION"
+# project.yml is the source of truth xcodegen reads. If it still holds the
+# previous release's numbers the generated project — and therefore the repo —
+# would claim the old version while we ship the new one. Sync it here so the
+# release can never disagree with itself; the change is reported so it gets
+# committed alongside the appcast.
+if [ "$(project_yml_version)" != "$VERSION" ] || \
+   [ "$(project_yml_build)" != "$BUILD_NUMBER" ]; then
+    echo "    project.yml said $(project_yml_version)/$(project_yml_build) — setting $VERSION/$BUILD_NUMBER"
+    /usr/bin/sed -i '' \
+        -e "s/^\( *MARKETING_VERSION: \).*/\1\"$VERSION\"/" \
+        -e "s/^\( *CURRENT_PROJECT_VERSION: \).*/\1\"$BUILD_NUMBER\"/" \
+        "$PROJECT_YML"
+    if [ "$(project_yml_version)" != "$VERSION" ] || \
+       [ "$(project_yml_build)" != "$BUILD_NUMBER" ]; then
+        echo "error: could not set the version in $PROJECT_YML — edit it by hand."
+        exit 1
+    fi
+    echo "    ⚠ project.yml was changed — commit it with this release"
+else
+    echo "    already $VERSION/$BUILD_NUMBER"
+fi
+
 echo "▸ Regenerating Xcode project"
-xcodegen generate
+generate_project
 
 echo "▸ Building Release configuration"
 xcodebuild -project LangAutoSwitcher.xcodeproj \
@@ -73,6 +179,21 @@ xcodebuild -project LangAutoSwitcher.xcodeproj \
            -quiet build
 
 # Now we're outside Dropbox — no xattr races.
+
+echo "▸ Verifying the built app carries v$VERSION"
+# Backstop: whatever went wrong upstream — a stale project file, a clobbered
+# regeneration, a typo'd argument — the thing we are about to sign, notarize
+# and publish must say what we think it says. Read it back from the bundle.
+BUILT_SHORT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+    "$APP_PATH/Contents/Info.plist")
+BUILT_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" \
+    "$APP_PATH/Contents/Info.plist")
+if [ "$BUILT_SHORT" != "$VERSION" ] || [ "$BUILT_BUILD" != "$BUILD_NUMBER" ]; then
+    echo "error: built app is $BUILT_SHORT ($BUILT_BUILD), expected $VERSION ($BUILD_NUMBER)."
+    echo "       Refusing to sign and publish a mislabelled build."
+    exit 1
+fi
+echo "    $BUILT_SHORT ($BUILT_BUILD) ✓"
 
 echo "▸ Signing Sparkle's nested helpers and XPC services"
 FRAMEWORKS="$APP_PATH/Contents/Frameworks"
@@ -318,3 +439,20 @@ else
     echo "  later — it does NOT touch the zip or appcast."
 fi
 echo "✓ docs/appcast.xml updated — commit + push so GitHub Pages serves it."
+
+# Dropbox can spawn a conflicted copy at any point while the release runs, not
+# only during generation. Say so now rather than letting it be committed or
+# leaving the repo claiming the wrong version.
+LEFTOVERS="$(list_conflicted_copies)"
+if [ -n "$LEFTOVERS" ]; then
+    echo ""
+    echo "⚠ Dropbox left conflicted copies behind — delete them before committing:"
+    echo "$LEFTOVERS" | while IFS= read -r f; do echo "    $f"; done
+fi
+if [ "$(pbxproj_version "$PBXPROJ")" != "$VERSION" ]; then
+    echo ""
+    echo "⚠ project.pbxproj no longer says $VERSION (Dropbox clobbered it after"
+    echo "  the build). The published artifacts are correct — they were verified"
+    echo "  against the built bundle — but re-run 'xcodegen generate' before"
+    echo "  committing so the repo matches what shipped."
+fi
