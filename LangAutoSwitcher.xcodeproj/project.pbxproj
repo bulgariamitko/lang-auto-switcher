@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04F9405928F68BD1C7CFBD7E /* MenuStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8FFF3F6457A9ABC20E3BD03 /* MenuStrings.swift */; };
 		0DC03FEA9E0ECEC309C88540 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 33F71A863AD65BF37AAAB6C6 /* Sparkle */; };
 		32E036EEBC49D52EF84A24E9 /* AppExclusionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1122FB65BC206D62DB355AA /* AppExclusionManager.swift */; };
 		347C0A8A694FDEB4BF1A74E2 /* bg-dictionary.txt in Resources */ = {isa = PBXBuildFile; fileRef = D44632B8E68385BA16B32986 /* bg-dictionary.txt */; };
@@ -45,6 +46,7 @@
 		C1D56C03557BAE5E2AA3504C /* InputController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputController.swift; sourceTree = "<group>"; };
 		D0C439FB0EF5A429656F8CFB /* KeyboardLayoutReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLayoutReader.swift; sourceTree = "<group>"; };
 		D44632B8E68385BA16B32986 /* bg-dictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "bg-dictionary.txt"; sourceTree = "<group>"; };
+		D8FFF3F6457A9ABC20E3BD03 /* MenuStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuStrings.swift; sourceTree = "<group>"; };
 		DB94C001B13C79D7434A128D /* LanguageDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageDetector.swift; sourceTree = "<group>"; };
 		E1122FB65BC206D62DB355AA /* AppExclusionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppExclusionManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -94,6 +96,7 @@
 				DB94C001B13C79D7434A128D /* LanguageDetector.swift */,
 				0736D33D8BB9C49157223984 /* LanguagePackStore.swift */,
 				070B2EE2E7D82277DB78B9E9 /* main.swift */,
+				D8FFF3F6457A9ABC20E3BD03 /* MenuStrings.swift */,
 				7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */,
 				2D28B3679FDE1D6E547A53C6 /* TextHeuristics.swift */,
 				B9F47F67CAFA631421CF6A24 /* UserWordsManager.swift */,
@@ -258,6 +261,7 @@
 				45782BF79B9DE568456A78CF /* KeymapManager.swift in Sources */,
 				4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */,
 				DB9F945EA2946B667FDF7177 /* LanguagePackStore.swift in Sources */,
+				04F9405928F68BD1C7CFBD7E /* MenuStrings.swift in Sources */,
 				591998EAC59E6129EFC61790 /* PhoneticMapper.swift in Sources */,
 				CD983040F79CA803E53C85D8 /* TextHeuristics.swift in Sources */,
 				A4568D9620ABC12D423E9BBC /* UserWordsManager.swift in Sources */,

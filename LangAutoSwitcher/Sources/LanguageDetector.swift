@@ -85,26 +85,34 @@ private let bulgarianScoreCallback: @convention(c) (UnsafePointer<CChar>?) -> Do
 
 final class LanguageDetector {
 
-    enum DetectedLanguage: String {
-        case english = "EN"
-        case bulgarian = "BG"
-        case uncertain = "??"
+    /// Which language a word was decided to be. Carries the language's index
+    /// in the detector's pack list, so this is not limited to two — `.base`
+    /// names the Latin language that unknown words fall back to.
+    enum DetectedLanguage: Equatable {
+        case uncertain
+        case language(Int)
+
+        static let base = DetectedLanguage.language(0)
 
         fileprivate var asInt: Int32 {
             switch self {
-            case .english:   return LANGAUTO_LANG_ENGLISH
-            case .bulgarian: return LANGAUTO_LANG_BULGARIAN
             case .uncertain: return LANGAUTO_LANG_UNCERTAIN
+            case .language(let i): return Int32(i)
             }
         }
 
         fileprivate static func fromInt(_ i: Int32) -> DetectedLanguage {
-            switch i {
-            case LANGAUTO_LANG_BULGARIAN: return .bulgarian
-            case LANGAUTO_LANG_UNCERTAIN: return .uncertain
-            default: return .english
-            }
+            i < 0 ? .uncertain : .language(Int(i))
         }
+
+        var index: Int? {
+            if case .language(let i) = self { return i }
+            return nil
+        }
+
+        /// True when this is the Latin language the user types directly, so
+        /// the word needs no conversion.
+        var isBase: Bool { self == .base }
     }
 
     struct WordResult {
@@ -149,14 +157,14 @@ final class LanguageDetector {
 
     var defaultLanguage: DetectedLanguage {
         get {
-            guard let ptr = ptr else { return .english }
+            guard let ptr = ptr else { return .base }
             return DetectedLanguage.fromInt(langauto_detector_get_default_language(ptr))
         }
         set {
             if let ptr = ptr {
                 langauto_detector_set_default_language(ptr, newValue.asInt)
             }
-            UserDefaults.standard.set(newValue.rawValue, forKey: Self.defaultLangKey)
+            UserDefaults.standard.set(code(for: newValue), forKey: Self.defaultLangKey)
         }
     }
 
@@ -293,6 +301,17 @@ final class LanguageDetector {
     /// Latin base.
     private(set) var activeLanguages: [String] = []
 
+    /// The short code of a detected language, for logs and menus.
+    func code(for language: DetectedLanguage) -> String {
+        guard let i = language.index, i < activeLanguages.count else { return "??" }
+        return activeLanguages[i]
+    }
+
+    /// The index a language code occupies in the detector, if it is active.
+    func index(of code: String) -> Int? {
+        activeLanguages.firstIndex(of: code)
+    }
+
     /// Display names for the menu, keyed by language code.
     private(set) var languageNames: [String: String] = [:]
 
@@ -412,10 +431,15 @@ final class LanguageDetector {
         langauto_detector_set_en_score(ptr, englishScoreCallback)
         langauto_detector_set_bg_score(ptr, bulgarianScoreCallback)
 
-        // Restore persisted default language preference
-        if let stored = UserDefaults.standard.string(forKey: Self.defaultLangKey),
-           let lang = DetectedLanguage(rawValue: stored) {
-            langauto_detector_set_default_language(ptr, lang.asInt)
+        // Restore the preferred default language. Stored as a code rather
+        // than an index, because an index means something different as soon
+        // as the enabled set changes. "EN"/"BG" are what older versions
+        // wrote, so accept those too.
+        if let stored = UserDefaults.standard.string(forKey: Self.defaultLangKey) {
+            let code = ["EN": "en", "BG": "bg"][stored] ?? stored
+            if let i = activeLanguages.firstIndex(of: code) {
+                langauto_detector_set_default_language(ptr, Int32(i))
+            }
         }
 
         // Restore persisted autocorrect preference (default: off).

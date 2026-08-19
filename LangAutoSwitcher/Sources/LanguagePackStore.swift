@@ -74,6 +74,25 @@ enum LanguagePackStore {
 
     static let baseCode = "en"
 
+    private static let leadKey = "LangAutoSwitcher_LeadLanguage"
+
+    /// The user's main language: it wins ambiguous words, and the menu is
+    /// written in it. Defaults to the first language they added beyond
+    /// English, which for an upgrading Bulgarian user is Bulgarian.
+    static var leadCode: String {
+        get {
+            if let stored = UserDefaults.standard.string(forKey: leadKey),
+               enabledCodes().contains(stored) {
+                return stored
+            }
+            return enabledCodes().first { $0 != baseCode } ?? baseCode
+        }
+        set {
+            guard enabledCodes().contains(newValue) else { return }
+            UserDefaults.standard.set(newValue, forKey: leadKey)
+        }
+    }
+
     // MARK: - First run
 
     /// What to start with when there is no stored choice yet.
