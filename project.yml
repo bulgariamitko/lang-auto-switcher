@@ -42,6 +42,9 @@ targets:
     sources:
       - path: LangAutoSwitcherTests
       - path: LangAutoSwitcher/Sources/TextHeuristics.swift
+      # Keymap layering: pure Swift, so it can be tested without the Rust core.
+      - path: LangAutoSwitcher/Sources/LanguageKeymap.swift
+      - path: LangAutoSwitcher/Sources/ShippedKeymaps.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dklaturov.LangAutoSwitcherTests

@@ -17,9 +17,11 @@
 		45782BF79B9DE568456A78CF /* KeymapManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCF1358F94DFACA75A6C8D7 /* KeymapManager.swift */; };
 		4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB94C001B13C79D7434A128D /* LanguageDetector.swift */; };
 		591998EAC59E6129EFC61790 /* PhoneticMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */; };
+		5A1F463183D3403AB74560AD /* LanguageKeymap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F827D9540BA8EF0B42829800 /* LanguageKeymap.swift */; };
 		6BDA531A24470DFB13B599EE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20FB57EB42156A2F1E27966 /* Assets.xcassets */; };
 		804C4C1ECC7A380E361A836D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 070B2EE2E7D82277DB78B9E9 /* main.swift */; };
 		859A62BDD1C38D1D6BC614F8 /* DictionaryDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF2461CB23D6EFFB1D6B8B1 /* DictionaryDownloader.swift */; };
+		9EC9EF532D323729439D9E4D /* ShippedKeymaps.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF8D30BE1C5A4F53BF7247A /* ShippedKeymaps.swift */; };
 		A4568D9620ABC12D423E9BBC /* UserWordsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F47F67CAFA631421CF6A24 /* UserWordsManager.swift */; };
 		BC24F8302E8D648648E6DF91 /* TextHeuristics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D28B3679FDE1D6E547A53C6 /* TextHeuristics.swift */; };
 		BD913790EE7BFC5A725A25A1 /* InputController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D56C03557BAE5E2AA3504C /* InputController.swift */; };
@@ -27,7 +29,10 @@
 		C5CBC79BC235EDDB0E1694E1 /* KeyboardLayoutReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0C439FB0EF5A429656F8CFB /* KeyboardLayoutReader.swift */; };
 		CD983040F79CA803E53C85D8 /* TextHeuristics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D28B3679FDE1D6E547A53C6 /* TextHeuristics.swift */; };
 		DB9F945EA2946B667FDF7177 /* LanguagePackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0736D33D8BB9C49157223984 /* LanguagePackStore.swift */; };
+		E23187E23E2DC55BECAAD57E /* ShippedKeymaps.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF8D30BE1C5A4F53BF7247A /* ShippedKeymaps.swift */; };
 		EA185251BA11F29B1F166BC3 /* icon.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 77FE3DA9751D9E457E985245 /* icon.tiff */; };
+		F023F68DCAC985032E942760 /* LanguageKeymap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F827D9540BA8EF0B42829800 /* LanguageKeymap.swift */; };
+		FDFDFCB00D658BB1257BEBFE /* LanguageKeymapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D53A193106702A4FCEFA7156 /* LanguageKeymapTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,10 +54,13 @@
 		C1D56C03557BAE5E2AA3504C /* InputController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputController.swift; sourceTree = "<group>"; };
 		D0C439FB0EF5A429656F8CFB /* KeyboardLayoutReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLayoutReader.swift; sourceTree = "<group>"; };
 		D44632B8E68385BA16B32986 /* bg-dictionary.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "bg-dictionary.txt"; sourceTree = "<group>"; };
+		D53A193106702A4FCEFA7156 /* LanguageKeymapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageKeymapTests.swift; sourceTree = "<group>"; };
 		D8FFF3F6457A9ABC20E3BD03 /* MenuStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuStrings.swift; sourceTree = "<group>"; };
 		DB94C001B13C79D7434A128D /* LanguageDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageDetector.swift; sourceTree = "<group>"; };
 		DDF2461CB23D6EFFB1D6B8B1 /* DictionaryDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryDownloader.swift; sourceTree = "<group>"; };
 		E1122FB65BC206D62DB355AA /* AppExclusionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppExclusionManager.swift; sourceTree = "<group>"; };
+		F827D9540BA8EF0B42829800 /* LanguageKeymap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageKeymap.swift; sourceTree = "<group>"; };
+		FDF8D30BE1C5A4F53BF7247A /* ShippedKeymaps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippedKeymaps.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -100,10 +108,12 @@
 				1DCF1358F94DFACA75A6C8D7 /* KeymapManager.swift */,
 				3C5543EB8AB3E8771D92551F /* LangAutoSwitcher-Bridging-Header.h */,
 				DB94C001B13C79D7434A128D /* LanguageDetector.swift */,
+				F827D9540BA8EF0B42829800 /* LanguageKeymap.swift */,
 				0736D33D8BB9C49157223984 /* LanguagePackStore.swift */,
 				070B2EE2E7D82277DB78B9E9 /* main.swift */,
 				D8FFF3F6457A9ABC20E3BD03 /* MenuStrings.swift */,
 				7C46731DF3E2442C89600C63 /* PhoneticMapper.swift */,
+				FDF8D30BE1C5A4F53BF7247A /* ShippedKeymaps.swift */,
 				2D28B3679FDE1D6E547A53C6 /* TextHeuristics.swift */,
 				B9F47F67CAFA631421CF6A24 /* UserWordsManager.swift */,
 			);
@@ -124,6 +134,7 @@
 		BA5750CA356D768CD0186DB6 /* LangAutoSwitcherTests */ = {
 			isa = PBXGroup;
 			children = (
+				D53A193106702A4FCEFA7156 /* LanguageKeymapTests.swift */,
 				4C22E17FFDA0D9A94A98FB63 /* TextHeuristicsTests.swift */,
 			);
 			path = LangAutoSwitcherTests;
@@ -252,6 +263,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5A1F463183D3403AB74560AD /* LanguageKeymap.swift in Sources */,
+				FDFDFCB00D658BB1257BEBFE /* LanguageKeymapTests.swift in Sources */,
+				E23187E23E2DC55BECAAD57E /* ShippedKeymaps.swift in Sources */,
 				BC24F8302E8D648648E6DF91 /* TextHeuristics.swift in Sources */,
 				C1A64EBA7CD2A1D20892B389 /* TextHeuristicsTests.swift in Sources */,
 			);
@@ -268,9 +282,11 @@
 				C5CBC79BC235EDDB0E1694E1 /* KeyboardLayoutReader.swift in Sources */,
 				45782BF79B9DE568456A78CF /* KeymapManager.swift in Sources */,
 				4887F02BC767D1EB670A0796 /* LanguageDetector.swift in Sources */,
+				F023F68DCAC985032E942760 /* LanguageKeymap.swift in Sources */,
 				DB9F945EA2946B667FDF7177 /* LanguagePackStore.swift in Sources */,
 				04F9405928F68BD1C7CFBD7E /* MenuStrings.swift in Sources */,
 				591998EAC59E6129EFC61790 /* PhoneticMapper.swift in Sources */,
+				9EC9EF532D323729439D9E4D /* ShippedKeymaps.swift in Sources */,
 				CD983040F79CA803E53C85D8 /* TextHeuristics.swift in Sources */,
 				A4568D9620ABC12D423E9BBC /* UserWordsManager.swift in Sources */,
 				804C4C1ECC7A380E361A836D /* main.swift in Sources */,
