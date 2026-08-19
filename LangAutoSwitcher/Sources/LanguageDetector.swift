@@ -289,29 +289,122 @@ final class LanguageDetector {
     var enDictionary: DictionaryProxy { DictionaryProxy(detector: ptr, language: .en) }
     var bgDictionary: DictionaryProxy { DictionaryProxy(detector: ptr, language: .bg) }
 
-    private init() {
-        let enURL = Bundle.main.url(forResource: "en-dictionary", withExtension: "txt")
-        let bgURL = Bundle.main.url(forResource: "bg-dictionary", withExtension: "txt")
-        let enText = (try? enURL.flatMap { try String(contentsOf: $0, encoding: .utf8) }) ?? ""
-        let bgText = (try? bgURL.flatMap { try String(contentsOf: $0, encoding: .utf8) }) ?? ""
-        if enText.isEmpty || bgText.isEmpty {
-            NSLog("LangAutoSwitcher: WARNING — dictionary resource missing or empty (en: %d bytes, bg: %d bytes)",
-                  enText.utf8.count, bgText.utf8.count)
-        }
+    /// Languages the detector was built with, in pack order. Index 0 is the
+    /// Latin base.
+    private(set) var activeLanguages: [String] = []
 
-        let handle: OpaquePointer? = enText.withCString { enCStr in
-            bgText.withCString { bgCStr in
-                langauto_detector_new(enCStr, bgCStr)
-            }
+    /// Display names for the menu, keyed by language code.
+    private(set) var languageNames: [String: String] = [:]
+
+    /// Vowels, which a keyboard layout cannot tell us. Needed for the guard
+    /// that refuses to "correct" a word by swapping its final vowel, since in
+    /// inflected languages that is a different grammatical form rather than a
+    /// typo. A language we have no list for simply loses that guard.
+    private static func vowels(for code: String) -> String {
+        switch code {
+        case "bg": return "аеиоуъюяь"
+        case "ru", "uk", "sr", "mk", "be": return "аеиоуыэюяёіїєь"
+        case "el":  return "αειουηω"
+        default:    return "aeiouyåäöéèü"
         }
+    }
+
+    /// Letters people mix up because the layout disagrees with how they would
+    /// romanise the language — not because the keys are close together. Only
+    /// pairs we have evidence for are listed.
+    private static func confusablePairs(for code: String) -> [(UInt32, UInt32)] {
+        let pairs: [(Character, Character)]
+        switch code {
+        case "bg":
+            // 'v' types ж where people mean в, 'y' types ъ where they mean й,
+            // 'x' types ь where they mean х. All three are real reports.
+            pairs = [("ж", "в"), ("ъ", "й"), ("ь", "х")]
+        default:
+            pairs = []
+        }
+        return pairs.compactMap { a, b in
+            guard let x = a.unicodeScalars.first, let y = b.unicodeScalars.first else { return nil }
+            return (x.value, y.value)
+        }
+    }
+
+    private init() {
+        // Which languages, and how each is typed, both come from the system
+        // rather than from hardcoded tables: the enabled list from the user's
+        // own input-source preference, the keymaps from macOS's own layouts.
+        let codes = LanguagePackStore.enabledCodes()
+        let layouts = Dictionary(
+            KeyboardLayoutReader.availableLanguages().map { ($0.languageCode, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let handle = langauto_detector_new_empty()
         self.ptr = handle
-        guard let ptr = handle else {
-            // Degrade to pass-through instead of crashing the host app:
-            // processWord returns input unchanged when ptr is nil, and the
-            // Diagnostics menu surfaces the zero dictionary counts.
+        guard let handle = handle else {
             NSLog("LangAutoSwitcher: ERROR — failed to create Rust detector; running in pass-through mode")
             return
         }
+
+        for code in codes {
+            guard let dict = LanguagePackStore.dictionaryText(for: code) else {
+                NSLog("LangAutoSwitcher: no dictionary installed for '%@' — skipping", code)
+                continue
+            }
+            let layout = layouts[code]
+            let isBase = (code == LanguagePackStore.baseCode)
+            // A Latin-script language needs only the letters a US keyboard
+            // lacks (Swedish å/ä/ö); everything else keeps its full keymap.
+            let pairs = layout?.keymap ?? []
+            let name = layout?.displayName ?? code
+
+            var keys: [UInt32] = []
+            var letters: [UInt32] = []
+            for (k, l) in pairs {
+                guard let ks = k.unicodeScalars.first, let ls = l.unicodeScalars.first,
+                      k.unicodeScalars.count == 1, l.unicodeScalars.count == 1 else { continue }
+                keys.append(ks.value)
+                letters.append(ls.value)
+            }
+            let vowels = Self.vowels(for: code)
+            let confusables = Self.confusablePairs(for: code)
+            var ca = confusables.map { $0.0 }
+            var cb = confusables.map { $0.1 }
+
+            let index = code.withCString { idC in
+                name.withCString { nameC in
+                    dict.withCString { dictC in
+                        vowels.withCString { vowelC in
+                            keys.withUnsafeBufferPointer { kBuf in
+                                letters.withUnsafeBufferPointer { lBuf in
+                                    ca.withUnsafeMutableBufferPointer { aBuf in
+                                        cb.withUnsafeMutableBufferPointer { bBuf in
+                                            langauto_detector_add_pack(
+                                                handle, idC, nameC, dictC,
+                                                kBuf.baseAddress, lBuf.baseAddress, kBuf.count,
+                                                vowelC,
+                                                aBuf.baseAddress, bBuf.baseAddress, aBuf.count,
+                                                isBase ? 1 : 0)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if index >= 0 {
+                activeLanguages.append(code)
+                languageNames[code] = name
+                NSLog("LangAutoSwitcher: language '%@' (%@) ready — %d keys, %d words",
+                      code, name, keys.count, dict.split(separator: "\n").count)
+            }
+        }
+
+        if activeLanguages.isEmpty {
+            NSLog("LangAutoSwitcher: WARNING — no languages available; running in pass-through mode")
+        }
+
+        let ptr = handle
 
         // Install platform callbacks
         langauto_detector_set_en_spell_check(ptr, enSpellCheckCallback)
