@@ -29,6 +29,15 @@ enum KeyboardChart {
         var map: [Character: Character] = [:]
         for (key, letter) in keymap { map[key] = letter }
 
+        // A language typed exactly as the keys print needs no diagram —
+        // English drew a full identity keyboard that said nothing and pushed
+        // the layouts that DO differ off the bottom of the window.
+        let drawnKeys = Set(rows.flatMap { $0 }).union(extras)
+        let differing = drawnKeys.filter { key in map[key].map { $0 != key } ?? false }
+        if differing.isEmpty {
+            return "types exactly what the keys print"
+        }
+
         var lines: [String] = []
         for (index, row) in rows.enumerated() {
             let indent = String(repeating: " ", count: index * 2)
@@ -50,12 +59,8 @@ enum KeyboardChart {
             lines.append(pairs)
         }
 
-        // Count only the lowercase keys actually drawn above, so the number
-        // matches what the user can see rather than counting shifted forms.
-        let drawn = Set(rows.flatMap { $0 }).union(extras)
-        let changed = drawn.filter { key in map[key].map { $0 != key } ?? false }.count
         lines.append("")
-        lines.append("\(changed) keys type something different.")
+        lines.append("\(differing.count) keys type something different.")
         return lines.joined(separator: "\n")
     }
 }

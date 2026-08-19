@@ -962,29 +962,49 @@ class InputController: IMKInputController {
         }
     }
 
-    /// Show which key types which letter, for a language of the user's
-    /// choosing. macOS's Keyboard Viewer cannot do this: it shows the selected
-    /// input source, which while we are active is plain ABC.
+    /// Show which key types which letter, for every enabled language at once.
+    ///
+    /// macOS's Keyboard Viewer cannot do this: it shows the SELECTED input
+    /// source, which while we are active is plain ABC. Asking which language
+    /// first was a needless step — there are only ever a handful enabled, and
+    /// seeing them together is what makes the differences obvious.
     @objc private func showKeyboardChart() {
         DebugLog.write("showKeyboardChart opened")
         let codes = detector.activeLanguages
-        let names = codes.map { detector.languageName(for: $0) }
-        guard let choice = askToChoose(title: MenuStrings.t(.showKeyboard),
-                                       message: MenuStrings.t(.showKeyboardPrompt),
-                                       options: names),
-              choice < codes.count else { return }
+        guard !codes.isEmpty else {
+            showMessage(MenuStrings.t(.showKeyboard), MenuStrings.t(.nothingToChoose))
+            return
+        }
+        let chart = codes.map { code in
+            let name = detector.languageName(for: code)
+            return name.uppercased() + "\n" +
+                KeyboardChart.render(keymap: detector.keymapPairs(for: code), languageName: name)
+        }.joined(separator: "\n\n" + String(repeating: "─", count: 44) + "\n\n")
 
-        let code = codes[choice]
-        let chart = KeyboardChart.render(keymap: detector.keymapPairs(for: code),
-                                         languageName: names[choice])
         withVisibleUI {
             let alert = NSAlert()
-            alert.messageText = names[choice]
+            alert.messageText = MenuStrings.t(.showKeyboard)
+            alert.informativeText = MenuStrings.t(.showKeyboardPrompt)
             alert.addButton(withTitle: MenuStrings.t(.ok))
-            let text = NSTextField(labelWithString: chart)
-            text.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+
+            // Several layouts stack up taller than a screen, so the chart
+            // scrolls rather than being clipped.
+            let text = NSTextView()
+            text.string = chart
+            text.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+            text.isEditable = false
+            text.isSelectable = true
+            text.drawsBackground = false
             text.sizeToFit()
-            alert.accessoryView = text
+
+            let width = max(text.frame.width + 20, 420)
+            let height = min(text.frame.height + 20, 520)
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+            scroll.documentView = text
+            scroll.hasVerticalScroller = height >= 520
+            scroll.drawsBackground = false
+            alert.accessoryView = scroll
+
             alert.window.level = .floating
             alert.window.makeKeyAndOrderFront(nil)
             alert.runModal()
