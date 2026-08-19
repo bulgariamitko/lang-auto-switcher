@@ -46,6 +46,16 @@ enum KeymapManager {
         return appSupport.appendingPathComponent("keymap.json")
     }
 
+    /// The user's keymap.json as written on disk, or nil when absent.
+    /// Used to build language packs, which need the whole map rather than
+    /// just the entries that differ from the defaults.
+    static func userMap() -> [String: String]? {
+        guard let data = try? Data(contentsOf: fileURL),
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+        else { return nil }
+        return raw.filter { $0.key != "_README" }
+    }
+
     /// Read keymap.json (creating with defaults if absent) and push the
     /// per-key *overrides* (entries that differ from the built-in defaults)
     /// into the Rust core.

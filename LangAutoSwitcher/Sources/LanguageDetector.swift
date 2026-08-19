@@ -315,6 +315,49 @@ final class LanguageDetector {
     /// Display names for the menu, keyed by language code.
     private(set) var languageNames: [String: String] = [:]
 
+    /// The keymap a language actually types with, in three layers.
+    ///
+    /// macOS supplies the standard layout, which is why a new language needs
+    /// no hand-written table. But this app has always offered keys macOS's
+    /// Bulgarian layout does not have — the ISO §/± key types ч, and ; and '
+    /// are alternates for ж and ь — and deriving the layout purely from macOS
+    /// silently dropped all of them. Typing "ka§ila" stopped producing
+    /// "качила" and left the § on screen.
+    ///
+    /// So: the system layout first, this app's own additions on top, and the
+    /// user's keymap.json last, because an explicit choice outranks both.
+    private static func keymap(for code: String,
+                               macOSLayout: KeyboardLayoutReader.Layout?) -> [(Character, Character)] {
+        var map: [Character: Character] = [:]
+        for (key, letter) in macOSLayout?.keymap ?? [] {
+            map[key] = letter
+        }
+        for (key, letter) in appExtras(for: code) {
+            map[key] = letter
+        }
+        // keymap.json predates multi-language support and describes the
+        // Bulgarian layout, so it applies there.
+        if code == "bg", let user = KeymapManager.userMap() {
+            for (k, v) in user {
+                if let key = k.first, let letter = v.first, k.count == 1, v.count == 1 {
+                    map[key] = letter
+                }
+            }
+        }
+        return map.map { ($0.key, $0.value) }
+    }
+
+    /// Keys this app provides that the system layout does not. Taken from the
+    /// shipped defaults, so the two cannot drift apart.
+    private static func appExtras(for code: String) -> [(Character, Character)] {
+        guard code == "bg" else { return [] }
+        return KeymapManager.defaults.compactMap { key, value in
+            guard let k = key.first, let v = value.first,
+                  key.count == 1, value.count == 1 else { return nil }
+            return (k, v)
+        }
+    }
+
     /// Vowels, which a keyboard layout cannot tell us. Needed for the guard
     /// that refuses to "correct" a word by swapping its final vowel, since in
     /// inflected languages that is a different grammatical form rather than a
@@ -371,9 +414,7 @@ final class LanguageDetector {
             }
             let layout = layouts[code]
             let isBase = (code == LanguagePackStore.baseCode)
-            // A Latin-script language needs only the letters a US keyboard
-            // lacks (Swedish å/ä/ö); everything else keeps its full keymap.
-            let pairs = layout?.keymap ?? []
+            let pairs = Self.keymap(for: code, macOSLayout: layout)
             let name = layout?.displayName ?? code
 
             var keys: [UInt32] = []
