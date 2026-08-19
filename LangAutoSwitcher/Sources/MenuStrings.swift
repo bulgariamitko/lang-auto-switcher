@@ -47,6 +47,8 @@ enum MenuStrings {
         case editKeymap
         case reloadKeymap
         case resetKeymap
+        case showKeyboard
+        case showKeyboardPrompt
     }
 
     /// Which language the menu is written in. Follows the lead language when
@@ -105,6 +107,8 @@ enum MenuStrings {
             .editKeymap:         "Edit the keyboard map…",
             .reloadKeymap:       "Reload the keyboard map",
             .resetKeymap:        "Reset the keyboard map",
+            .showKeyboard:       "Show the keyboard for…",
+            .showKeyboardPrompt: "Which language's keys do you want to see?",
         ],
         "bg": [
             .defaultForUnknown: "По подразбиране за непознати думи:",
@@ -145,6 +149,8 @@ enum MenuStrings {
             .editKeymap:         "Редактирай клавишите…",
             .reloadKeymap:       "Презареди клавишите",
             .resetKeymap:        "Върни клавишите по подразбиране",
+            .showKeyboard:       "Покажи клавиатурата за…",
+            .showKeyboardPrompt: "Клавишите на кой език искаш да видиш?",
         ],
         "ru": [
             .defaultForUnknown: "По умолчанию для неизвестных слов:",
@@ -185,6 +191,8 @@ enum MenuStrings {
             .editKeymap:         "Изменить раскладку…",
             .reloadKeymap:       "Перезагрузить раскладку",
             .resetKeymap:        "Сбросить раскладку",
+            .showKeyboard:       "Показать клавиатуру для…",
+            .showKeyboardPrompt: "Клавиши какого языка показать?",
         ],
     ]
 }

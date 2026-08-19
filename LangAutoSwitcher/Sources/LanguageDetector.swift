@@ -307,6 +307,16 @@ final class LanguageDetector {
         return activeLanguages[i]
     }
 
+    /// The keymap a language actually types with, for display. Built the same
+    /// way the pack was, so the chart cannot show something different from
+    /// what typing produces.
+    func keymapPairs(for code: String) -> [(Character, Character)] {
+        let layouts = Dictionary(
+            KeyboardLayoutReader.availableLanguages().map { ($0.languageCode, $0) },
+            uniquingKeysWith: { first, _ in first })
+        return Self.keymap(for: code, macOSLayout: layouts[code])
+    }
+
     /// A language's name, written in the menu's own language: "български"
     /// when the menu is Bulgarian, "Bulgarian" when it is English. Taken from
     /// the system rather than a table, so it is right for all 150 languages.

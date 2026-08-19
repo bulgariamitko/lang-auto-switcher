@@ -705,6 +705,11 @@ class InputController: IMKInputController {
 
         menu.addItem(NSMenuItem.separator())
 
+        let showKeyboardItem = NSMenuItem(title: MenuStrings.t(.showKeyboard),
+                                          action: #selector(showKeyboardChart), keyEquivalent: "")
+        showKeyboardItem.target = self
+        menu.addItem(showKeyboardItem)
+
         let editKeymapItem = NSMenuItem(title: MenuStrings.t(.editKeymap),
                                         action: #selector(editKeymap),
                                         keyEquivalent: "")
@@ -954,6 +959,35 @@ class InputController: IMKInputController {
                 self.showMessage(MenuStrings.t(.noDictionary, picked.displayName),
                                  error.localizedDescription, style: .warning)
             }
+        }
+    }
+
+    /// Show which key types which letter, for a language of the user's
+    /// choosing. macOS's Keyboard Viewer cannot do this: it shows the selected
+    /// input source, which while we are active is plain ABC.
+    @objc private func showKeyboardChart() {
+        DebugLog.write("showKeyboardChart opened")
+        let codes = detector.activeLanguages
+        let names = codes.map { detector.languageName(for: $0) }
+        guard let choice = askToChoose(title: MenuStrings.t(.showKeyboard),
+                                       message: MenuStrings.t(.showKeyboardPrompt),
+                                       options: names),
+              choice < codes.count else { return }
+
+        let code = codes[choice]
+        let chart = KeyboardChart.render(keymap: detector.keymapPairs(for: code),
+                                         languageName: names[choice])
+        withVisibleUI {
+            let alert = NSAlert()
+            alert.messageText = names[choice]
+            alert.addButton(withTitle: MenuStrings.t(.ok))
+            let text = NSTextField(labelWithString: chart)
+            text.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+            text.sizeToFit()
+            alert.accessoryView = text
+            alert.window.level = .floating
+            alert.window.makeKeyAndOrderFront(nil)
+            alert.runModal()
         }
     }
 
