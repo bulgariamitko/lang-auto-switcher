@@ -25,6 +25,14 @@ enum KeyboardChart {
     /// a dot there would read as "this key does nothing", which is wrong and
     /// matters most for a Latin language like Swedish where most keys are
     /// unchanged and only a few carry å, ä and ö.
+    /// Marks the two rows of each pair. A bare arrow rather than words,
+    /// because this file has to read the same whatever language the menu is
+    /// in — the sentence explaining it is localized by the caller. Without
+    /// any marker the diagram is just a row repeated twice, and "press this,
+    /// get that" is only obvious once you already know that is what it means.
+    private static let pressPrefix = "   "
+    private static let typedPrefix = " → "
+
     static func render(keymap: [(Character, Character)], languageName: String) -> String {
         var map: [Character: Character] = [:]
         for (key, letter) in keymap { map[key] = letter }
@@ -41,8 +49,8 @@ enum KeyboardChart {
         var lines: [String] = []
         for (index, row) in rows.enumerated() {
             let indent = String(repeating: " ", count: index * 2)
-            var keyLine = indent
-            var letterLine = indent
+            var keyLine = pressPrefix + indent
+            var letterLine = typedPrefix + indent
             for key in row {
                 let produced = map[key]
                 keyLine += " \(key) "

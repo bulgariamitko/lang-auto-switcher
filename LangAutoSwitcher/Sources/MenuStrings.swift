@@ -108,7 +108,7 @@ enum MenuStrings {
             .reloadKeymap:       "Reload the keyboard map",
             .resetKeymap:        "Reset the keyboard map",
             .showKeyboard:       "Show the keyboard",
-            .showKeyboardPrompt: "Every language you have enabled.",
+            .showKeyboardPrompt: "Top row: the key you press. Below it: the letter you get.",
         ],
         "bg": [
             .defaultForUnknown: "По подразбиране за непознати думи:",
@@ -150,7 +150,7 @@ enum MenuStrings {
             .reloadKeymap:       "Презареди клавишите",
             .resetKeymap:        "Върни клавишите по подразбиране",
             .showKeyboard:       "Покажи клавиатурата",
-            .showKeyboardPrompt: "Всички езици, които си включил.",
+            .showKeyboardPrompt: "Горният ред е клавишът, който натискаш. Под него е буквата, която излиза.",
         ],
         "ru": [
             .defaultForUnknown: "По умолчанию для неизвестных слов:",
@@ -192,7 +192,7 @@ enum MenuStrings {
             .reloadKeymap:       "Перезагрузить раскладку",
             .resetKeymap:        "Сбросить раскладку",
             .showKeyboard:       "Показать клавиатуру",
-            .showKeyboardPrompt: "Все включённые языки.",
+            .showKeyboardPrompt: "Верхний ряд — клавиша, которую вы нажимаете. Под ней — буква, которая получается.",
         ],
     ]
 }
