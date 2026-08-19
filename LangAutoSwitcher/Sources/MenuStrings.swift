@@ -29,6 +29,19 @@ enum MenuStrings {
         case quit
         case noDictionary
         case downloading
+        case languageAddedTitle
+        case languageAddedBody
+        case languageRemovedTitle
+        case restartNeeded
+        case removeLanguageMenu
+        case addLanguagePrompt
+        case leadLanguagePrompt
+        case removeLanguagePrompt
+        case leadLanguageSet
+        case downloadingBody
+        case nothingToChoose
+        case ok
+        case cancel
     }
 
     /// Which language the menu is written in. Follows the lead language when
@@ -69,6 +82,19 @@ enum MenuStrings {
             .quit:              "Quit",
             .noDictionary:      "%@ — no dictionary installed",
             .downloading:       "Downloading %@…",
+            .languageAddedTitle: "%@ added",
+            .languageAddedBody:  "%@ is ready. Quit and reopen the app you are typing in (or log out and back in) and then just type as you normally do — it will switch automatically.",
+            .languageRemovedTitle: "%@ removed",
+            .restartNeeded:      "Reopen the app you are typing in for this to take effect.",
+            .removeLanguageMenu: "Remove a language…",
+            .addLanguagePrompt:  "Pick a language to add. Its dictionary downloads once.",
+            .leadLanguagePrompt: "The main language wins when a word could be either, and this menu is written in it.",
+            .removeLanguagePrompt: "Pick a language to stop using.",
+            .leadLanguageSet:    "%@ is now your main language.",
+            .downloadingBody:    "Downloading the dictionary — this takes a moment.",
+            .nothingToChoose:    "There is nothing to choose here.",
+            .ok:                 "OK",
+            .cancel:             "Cancel",
         ],
         "bg": [
             .defaultForUnknown: "По подразбиране за непознати думи:",
@@ -91,6 +117,19 @@ enum MenuStrings {
             .quit:              "Изход",
             .noDictionary:      "%@ — няма инсталиран речник",
             .downloading:       "Изтегляне на %@…",
+            .languageAddedTitle: "%@ е добавен",
+            .languageAddedBody:  "%@ е готов. Затвори и отвори отново приложението, в което пишеш (или излез и влез в профила си), и просто пиши както обикновено — ще превключва само.",
+            .languageRemovedTitle: "%@ е премахнат",
+            .restartNeeded:      "Затвори и отвори отново приложението, в което пишеш, за да влезе в сила.",
+            .removeLanguageMenu: "Премахни език…",
+            .addLanguagePrompt:  "Избери език за добавяне. Речникът му се изтегля веднъж.",
+            .leadLanguagePrompt: "Основният език печели, когато думата може да е и на двата, и това меню е на него.",
+            .removeLanguagePrompt: "Избери език, който да спреш да ползваш.",
+            .leadLanguageSet:    "%@ вече е основният ти език.",
+            .downloadingBody:    "Изтегля се речникът — това отнема момент.",
+            .nothingToChoose:    "Няма какво да се избира тук.",
+            .ok:                 "Добре",
+            .cancel:             "Отказ",
         ],
         "ru": [
             .defaultForUnknown: "По умолчанию для неизвестных слов:",
@@ -113,6 +152,19 @@ enum MenuStrings {
             .quit:              "Выход",
             .noDictionary:      "%@ — словарь не установлен",
             .downloading:       "Загрузка %@…",
+            .languageAddedTitle: "%@ добавлен",
+            .languageAddedBody:  "%@ готов. Закройте и снова откройте приложение, в котором печатаете, и просто печатайте как обычно — переключение произойдёт само.",
+            .languageRemovedTitle: "%@ удалён",
+            .restartNeeded:      "Закройте и снова откройте приложение, в котором печатаете.",
+            .removeLanguageMenu: "Удалить язык…",
+            .addLanguagePrompt:  "Выберите язык для добавления. Его словарь загрузится один раз.",
+            .leadLanguagePrompt: "Основной язык побеждает, когда слово может быть на любом из них, и это меню написано на нём.",
+            .removeLanguagePrompt: "Выберите язык, который больше не нужен.",
+            .leadLanguageSet:    "%@ теперь ваш основной язык.",
+            .downloadingBody:    "Загружается словарь — это займёт момент.",
+            .nothingToChoose:    "Здесь нечего выбирать.",
+            .ok:                 "ОК",
+            .cancel:             "Отмена",
         ],
     ]
 }

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		04F9405928F68BD1C7CFBD7E /* MenuStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8FFF3F6457A9ABC20E3BD03 /* MenuStrings.swift */; };
 		0DC03FEA9E0ECEC309C88540 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 33F71A863AD65BF37AAAB6C6 /* Sparkle */; };
+		2F3AA43E42670367288ADD74 /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3BDC49B84E33450723E0C6 /* DebugLog.swift */; };
 		32E036EEBC49D52EF84A24E9 /* AppExclusionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1122FB65BC206D62DB355AA /* AppExclusionManager.swift */; };
 		347C0A8A694FDEB4BF1A74E2 /* bg-dictionary.txt in Resources */ = {isa = PBXBuildFile; fileRef = D44632B8E68385BA16B32986 /* bg-dictionary.txt */; };
 		3803168B1B2A05F9E52C559E /* en-dictionary.txt in Resources */ = {isa = PBXBuildFile; fileRef = BBD412EEC07513075222764E /* en-dictionary.txt */; };
@@ -35,6 +36,7 @@
 		078D9FBAE3CC36389ABED17B /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		1DCF1358F94DFACA75A6C8D7 /* KeymapManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeymapManager.swift; sourceTree = "<group>"; };
 		2D28B3679FDE1D6E547A53C6 /* TextHeuristics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextHeuristics.swift; sourceTree = "<group>"; };
+		3A3BDC49B84E33450723E0C6 /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
 		3C5543EB8AB3E8771D92551F /* LangAutoSwitcher-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "LangAutoSwitcher-Bridging-Header.h"; sourceTree = "<group>"; };
 		4C22E17FFDA0D9A94A98FB63 /* TextHeuristicsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextHeuristicsTests.swift; sourceTree = "<group>"; };
 		4D480481EA1F2590CADC0198 /* LangAutoSwitcherTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LangAutoSwitcherTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -91,6 +93,7 @@
 			isa = PBXGroup;
 			children = (
 				E1122FB65BC206D62DB355AA /* AppExclusionManager.swift */,
+				3A3BDC49B84E33450723E0C6 /* DebugLog.swift */,
 				DDF2461CB23D6EFFB1D6B8B1 /* DictionaryDownloader.swift */,
 				C1D56C03557BAE5E2AA3504C /* InputController.swift */,
 				D0C439FB0EF5A429656F8CFB /* KeyboardLayoutReader.swift */,
@@ -259,6 +262,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				32E036EEBC49D52EF84A24E9 /* AppExclusionManager.swift in Sources */,
+				2F3AA43E42670367288ADD74 /* DebugLog.swift in Sources */,
 				859A62BDD1C38D1D6BC614F8 /* DictionaryDownloader.swift in Sources */,
 				BD913790EE7BFC5A725A25A1 /* InputController.swift in Sources */,
 				C5CBC79BC235EDDB0E1694E1 /* KeyboardLayoutReader.swift in Sources */,

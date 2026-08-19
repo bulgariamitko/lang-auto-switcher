@@ -626,48 +626,36 @@ class InputController: IMKInputController {
     override func menu() -> NSMenu! {
         let menu = NSMenu(title: "LangAutoSwitcher")
 
-        // Which language leads: it wins ambiguous words and the menu is
-        // written in it.
-        let languagesItem = NSMenuItem(title: MenuStrings.t(.languages), action: nil, keyEquivalent: "")
-        let languagesMenu = NSMenu()
-        for code in detector.activeLanguages {
-            let name = detector.languageNames[code] ?? code
-            let item = NSMenuItem(title: name, action: #selector(setLeadLanguage(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = code
-            item.state = (code == LanguagePackStore.leadCode) ? .on : .off
-            languagesMenu.addItem(item)
-        }
-        languagesMenu.addItem(NSMenuItem.separator())
+        // Language management lives in dialogs rather than submenus.
+        // IMK does not dispatch actions for items nested inside a submenu —
+        // the menu renders and the click does nothing at all — and it also
+        // hands actions an NSDictionary rather than the clicked NSMenuItem.
+        // Both problems disappear if every menu action is a plain top-level
+        // item that takes no arguments and asks its question in a dialog.
+        let active = detector.activeLanguages
+            .map { detector.languageNames[$0] ?? $0 }
+            .joined(separator: ", ")
+        let header = NSMenuItem(title: MenuStrings.t(.languages) + ": " + active,
+                                action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
 
-        // Everything macOS has a keyboard layout for, minus what is already on.
-        let addItem = NSMenuItem(title: MenuStrings.t(.addLanguage), action: nil, keyEquivalent: "")
-        let addMenu = NSMenu()
-        let active = Set(detector.activeLanguages)
-        for layout in KeyboardLayoutReader.availableLanguages()
-            .filter({ !active.contains($0.languageCode) })
-            .sorted(by: { $0.displayName < $1.displayName }) {
-            let item = NSMenuItem(title: layout.displayName,
-                                  action: #selector(addLanguage(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = layout.languageCode
-            addMenu.addItem(item)
-        }
-        addItem.submenu = addMenu
-        languagesMenu.addItem(addItem)
+        let mainItem = NSMenuItem(title: MenuStrings.t(.leadLanguage) + "…",
+                                  action: #selector(chooseLeadLanguage), keyEquivalent: "")
+        mainItem.target = self
+        menu.addItem(mainItem)
 
-        // Removing is offered for every language except the Latin base, which
-        // is what unknown words fall back to.
-        for code in detector.activeLanguages where code != LanguagePackStore.baseCode {
-            let name = detector.languageNames[code] ?? code
-            let item = NSMenuItem(title: MenuStrings.t(.removeLanguage, name),
-                                  action: #selector(removeLanguage(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = code
-            languagesMenu.addItem(item)
+        let addItem = NSMenuItem(title: MenuStrings.t(.addLanguage),
+                                 action: #selector(chooseLanguageToAdd), keyEquivalent: "")
+        addItem.target = self
+        menu.addItem(addItem)
+
+        if detector.activeLanguages.count > 1 {
+            let removeItem = NSMenuItem(title: MenuStrings.t(.removeLanguageMenu),
+                                        action: #selector(chooseLanguageToRemove), keyEquivalent: "")
+            removeItem.target = self
+            menu.addItem(removeItem)
         }
-        languagesItem.submenu = languagesMenu
-        menu.addItem(languagesItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -882,63 +870,158 @@ class InputController: IMKInputController {
 
     /// Make a language the lead: it wins ambiguous words and the menu is
     /// written in it from now on.
-    @objc private func setLeadLanguage(_ sender: NSMenuItem) {
-        guard let code = sender.representedObject as? String else { return }
+    /// Run a block that puts something on screen.
+    ///
+    /// The app ships with LSBackgroundOnly, which pins the activation policy to
+    /// `.prohibited` — a process in that state cannot display ANY window, so
+    /// `runModal()` returns immediately having shown nothing. That is why the
+    /// first attempts at a confirmation dialog appeared to do nothing at all.
+    /// Switching to `.accessory` for the duration allows windows without
+    /// putting the input method in the Dock, and the policy is restored after.
+    private func withVisibleUI<T>(_ body: () -> T) -> T {
+        let previous = NSApp.activationPolicy()
+        if previous != .accessory {
+            NSApp.setActivationPolicy(.accessory)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        defer {
+            if previous != .accessory {
+                NSApp.setActivationPolicy(previous)
+            }
+        }
+        return body()
+    }
+
+    /// Ask the user to pick from a list, returning the chosen index.
+    ///
+    /// A popup inside an alert rather than a menu of menus: this app owns no
+    /// windows, and IMK will not deliver clicks from a submenu, so a dialog is
+    /// the only place a choice can reliably be made.
+    private func askToChoose(title: String, message: String, options: [String]) -> Int? {
+        guard !options.isEmpty else {
+            showMessage(title, MenuStrings.t(.nothingToChoose))
+            return nil
+        }
+        return withVisibleUI {
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = message
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: MenuStrings.t(.ok))
+            alert.addButton(withTitle: MenuStrings.t(.cancel))
+
+            let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26),
+                                      pullsDown: false)
+            popup.addItems(withTitles: options)
+            alert.accessoryView = popup
+            alert.window.level = .floating
+            alert.window.makeKeyAndOrderFront(nil)
+
+            guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+            return popup.indexOfSelectedItem
+        }
+    }
+
+    @objc private func chooseLanguageToAdd() {
+        DebugLog.write("chooseLanguageToAdd opened (policy=\(NSApp.activationPolicy().rawValue))")
+        let active = Set(detector.activeLanguages)
+        let candidates = KeyboardLayoutReader.availableLanguages()
+            .filter { !active.contains($0.languageCode) }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        guard let choice = askToChoose(title: MenuStrings.t(.addLanguage),
+                                       message: MenuStrings.t(.addLanguagePrompt),
+                                       options: candidates.map { $0.displayName }),
+              choice < candidates.count else { return }
+
+        let picked = candidates[choice]
+        DebugLog.write("chose \(picked.languageCode) (\(picked.displayName))")
+
+        if LanguagePackStore.isInstalled(picked.languageCode) {
+            LanguagePackStore.addLanguage(picked.languageCode)
+            notifyLanguageAdded(picked.displayName)
+            return
+        }
+        showMessage(MenuStrings.t(.downloading, picked.displayName),
+                    MenuStrings.t(.downloadingBody))
+        DictionaryDownloader.install(picked.languageCode) { result in
+            switch result {
+            case .success(let n):
+                DebugLog.write("download ok for \(picked.languageCode): \(n) words")
+                LanguagePackStore.addLanguage(picked.languageCode)
+                self.notifyLanguageAdded(picked.displayName)
+            case .failure(let error):
+                DebugLog.write("download FAILED for \(picked.languageCode): \(error.localizedDescription)")
+                self.showMessage(MenuStrings.t(.noDictionary, picked.displayName),
+                                 error.localizedDescription, style: .warning)
+            }
+        }
+    }
+
+    @objc private func chooseLeadLanguage() {
+        DebugLog.write("chooseLeadLanguage opened")
+        let codes = detector.activeLanguages
+        let names = codes.map { detector.languageNames[$0] ?? $0 }
+        guard let choice = askToChoose(title: MenuStrings.t(.leadLanguage),
+                                       message: MenuStrings.t(.leadLanguagePrompt),
+                                       options: names),
+              choice < codes.count else { return }
+        let code = codes[choice]
         LanguagePackStore.leadCode = code
         if let i = detector.index(of: code) {
             detector.defaultLanguage = .language(i)
         }
-        NSLog("LangAutoSwitcher: main language is now '%@'", code)
+        DebugLog.write("main language is now \(code)")
+        showMessage(MenuStrings.t(.leadLanguage), MenuStrings.t(.leadLanguageSet, names[choice]))
     }
 
-    @objc private func addLanguage(_ sender: NSMenuItem) {
-        guard let code = sender.representedObject as? String else { return }
-        let name = sender.title
+    @objc private func chooseLanguageToRemove() {
+        DebugLog.write("chooseLanguageToRemove opened")
+        let codes = detector.activeLanguages.filter { $0 != LanguagePackStore.baseCode }
+        let names = codes.map { detector.languageNames[$0] ?? $0 }
+        guard let choice = askToChoose(title: MenuStrings.t(.removeLanguageMenu),
+                                       message: MenuStrings.t(.removeLanguagePrompt),
+                                       options: names),
+              choice < codes.count else { return }
+        LanguagePackStore.removeLanguage(codes[choice])
+        DebugLog.write("removed \(codes[choice])")
+        notifyLanguageRemoved(names[choice])
+    }
 
-        // Fetch the word list before enabling the language, so we never end up
-        // with a language switched on that the detector cannot actually load.
-        if LanguagePackStore.isInstalled(code) {
-            LanguagePackStore.addLanguage(code)
-            notifyLanguageChange(name)
-            return
-        }
-
-        let progress = NSAlert()
-        progress.messageText = MenuStrings.t(.downloading, name)
-        progress.informativeText = ""
-        progress.addButton(withTitle: "OK")
-
-        DictionaryDownloader.install(code) { result in
-            switch result {
-            case .success:
-                LanguagePackStore.addLanguage(code)
-                self.notifyLanguageChange(name)
-            case .failure(let error):
+    /// Tell the user, visibly, what just happened.
+    ///
+    /// This app is LSBackgroundOnly/LSUIElement, so it owns no windows and is
+    /// never the active app — an NSAlert shown without activating first can
+    /// appear behind everything or not at all. Activating is what makes the
+    /// confirmation actually reach the user.
+    private func showMessage(_ title: String, _ detail: String, style: NSAlert.Style = .informational) {
+        DispatchQueue.main.async {
+            self.withVisibleUI {
                 let alert = NSAlert()
-                alert.messageText = MenuStrings.t(.noDictionary, name)
-                alert.informativeText = error.localizedDescription
-                alert.alertStyle = .warning
+                alert.messageText = title
+                alert.informativeText = detail
+                alert.alertStyle = style
+                alert.addButton(withTitle: MenuStrings.t(.ok))
+                alert.window.level = .floating
+                alert.window.makeKeyAndOrderFront(nil)
                 alert.runModal()
             }
         }
     }
 
-    @objc private func removeLanguage(_ sender: NSMenuItem) {
-        guard let code = sender.representedObject as? String else { return }
-        LanguagePackStore.removeLanguage(code)
-        NSLog("LangAutoSwitcher: removed language '%@'", code)
-        notifyLanguageChange(code)
+    /// Confirmation that a language is now available. The detector builds its
+    /// languages when it starts, so a newly added one needs a relaunch before
+    /// it converts anything — say so plainly rather than leaving the user to
+    /// wonder why typing has not changed.
+    private func notifyLanguageAdded(_ name: String) {
+        showMessage(
+            MenuStrings.t(.languageAddedTitle, name),
+            MenuStrings.t(.languageAddedBody, name))
     }
 
-    /// The detector builds its languages once at startup, so a change needs a
-    /// relaunch. Say so rather than leaving the user wondering why nothing
-    /// happened.
-    private func notifyLanguageChange(_ code: String) {
-        let alert = NSAlert()
-        alert.messageText = MenuStrings.t(.languages)
-        alert.informativeText = "\(code): restart LangAutoSwitcher for this to take effect."
-        alert.alertStyle = .informational
-        alert.runModal()
+    private func notifyLanguageRemoved(_ name: String) {
+        showMessage(
+            MenuStrings.t(.languageRemovedTitle, name),
+            MenuStrings.t(.restartNeeded))
     }
 
     @objc private func toggleAutocorrect() {
