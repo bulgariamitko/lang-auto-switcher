@@ -10,9 +10,12 @@
 //! function-pointer callbacks the platform shim sets at startup. On Linux/Windows
 //! the shim can install no-op callbacks and the detector degrades gracefully.
 
+pub mod lang;
+pub mod packs;
 pub mod phonetic;
 pub mod autocorrect;
 pub mod detector;
 pub mod ffi;
 
 pub use detector::{DetectedLanguage, LanguageDetector, WordResult};
+pub use lang::LanguagePack;

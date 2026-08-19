@@ -147,23 +147,26 @@ pub unsafe extern "C" fn langauto_detector_free(d: *mut LangAutoDetector) {
 
 // ---------- language enum mirror ----------
 
+// Language is now an INDEX into the detector's pack list, so the ABI is no
+// longer limited to two. Index 0 is always the Latin base (English) and 1 is
+// the first added language, which keeps the old constants valid. "Uncertain"
+// moved to -1 because 2 now means "the third language".
 pub const LANGAUTO_LANG_ENGLISH: c_int = 0;
 pub const LANGAUTO_LANG_BULGARIAN: c_int = 1;
-pub const LANGAUTO_LANG_UNCERTAIN: c_int = 2;
+pub const LANGAUTO_LANG_UNCERTAIN: c_int = -1;
 
 fn lang_to_int(l: DetectedLanguage) -> c_int {
-    match l {
-        DetectedLanguage::English => LANGAUTO_LANG_ENGLISH,
-        DetectedLanguage::Bulgarian => LANGAUTO_LANG_BULGARIAN,
-        DetectedLanguage::Uncertain => LANGAUTO_LANG_UNCERTAIN,
+    match l.index() {
+        Some(i) => i as c_int,
+        None => LANGAUTO_LANG_UNCERTAIN,
     }
 }
 
 fn int_to_lang(i: c_int) -> DetectedLanguage {
-    match i {
-        LANGAUTO_LANG_BULGARIAN => DetectedLanguage::Bulgarian,
-        LANGAUTO_LANG_UNCERTAIN => DetectedLanguage::Uncertain,
-        _ => DetectedLanguage::English,
+    if i < 0 {
+        DetectedLanguage::Uncertain
+    } else {
+        DetectedLanguage::Lang(i as usize)
     }
 }
 
@@ -296,7 +299,8 @@ pub unsafe extern "C" fn langauto_detector_word_in_en_dict(
         return 0;
     }
     let Some(w) = c_to_rust_str(word) else { return 0 };
-    if (*d).inner.en_dict.contains(&w.to_lowercase()) { 1 } else { 0 }
+    let packs = &(*d).inner.packs;
+    if packs.first().map_or(false, |p| p.contains(w)) { 1 } else { 0 }
 }
 
 /// 1 if `cyrillic_word` (lowercase) is in the Bulgarian dictionary.
@@ -312,7 +316,8 @@ pub unsafe extern "C" fn langauto_detector_word_in_bg_dict(
         return 0;
     }
     let Some(w) = c_to_rust_str(cyrillic_word) else { return 0 };
-    if (*d).inner.bg_dict.contains(&w.to_lowercase()) { 1 } else { 0 }
+    let packs = &(*d).inner.packs;
+    if packs.get(1).map_or(false, |p| p.contains(w)) { 1 } else { 0 }
 }
 
 /// Set the default language preference (used to break ties).
@@ -419,7 +424,11 @@ pub unsafe extern "C" fn langauto_detector_dict_counts(
     let (en, bg) = if d.is_null() {
         (0, 0)
     } else {
-        ((*d).inner.en_dict.len(), (*d).inner.bg_dict.len())
+        let packs = &(*d).inner.packs;
+        (
+            packs.first().map_or(0, |p| p.dict.len()),
+            packs.get(1).map_or(0, |p| p.dict.len()),
+        )
     };
     if !out_en.is_null() {
         *out_en = en;

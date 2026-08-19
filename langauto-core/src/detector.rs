@@ -6,29 +6,39 @@
 //! Linux/Windows the callbacks can be None and the detector degrades to
 //! dictionary-only + edit-distance.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::autocorrect::{
-    best_bulgarian_typo_fix, correct_bulgarian, correct_english,
-    expand_bulgarian_abbreviation, expand_english_abbreviation,
+    best_typo_fix, correct_bulgarian, correct_english,
     split_into_two_words, SpellCheckFn,
 };
-use crate::phonetic::{contains_cyrillic_only_key, is_latin_word, to_cyrillic};
+use crate::lang::LanguagePack;
+use crate::packs;
 
+/// Which language a word was decided to be. `Lang(i)` indexes the detector's
+/// pack list, so the set of languages is configuration rather than a fixed
+/// enum — adding a fourth language does not touch this type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetectedLanguage {
-    English,
-    Bulgarian,
     Uncertain,
+    Lang(usize),
 }
 
 impl DetectedLanguage {
-    pub fn as_str(&self) -> &'static str {
+    /// The Latin base pack is always first, so these name the two languages
+    /// that ship enabled by default and keep call sites readable.
+    pub const ENGLISH: Self = DetectedLanguage::Lang(0);
+    pub const BULGARIAN: Self = DetectedLanguage::Lang(1);
+
+    pub fn index(&self) -> Option<usize> {
         match self {
-            DetectedLanguage::English => "EN",
-            DetectedLanguage::Bulgarian => "BG",
-            DetectedLanguage::Uncertain => "??",
+            DetectedLanguage::Lang(i) => Some(*i),
+            DetectedLanguage::Uncertain => None,
         }
+    }
+
+    pub fn is_uncertain(&self) -> bool {
+        matches!(self, DetectedLanguage::Uncertain)
     }
 }
 
@@ -47,8 +57,12 @@ const CONTEXT_WINDOW_SIZE: usize = 6;
 const RECENT_WORDS_MAX: usize = 8;
 
 pub struct LanguageDetector {
-    pub en_dict: HashSet<String>,
-    pub bg_dict: HashSet<String>,
+    /// Every language currently enabled. Index 0 is the Latin base (English):
+    /// unknown words fall back to it, because "not recognised" should leave
+    /// the text as typed rather than guess a transliteration. Everything the
+    /// detector knows about a language lives in its pack, so supporting a
+    /// fourth language is a matter of pushing another one here.
+    pub packs: Vec<LanguagePack>,
     pub en_spell_check: Option<SpellCheckFn>,
     pub bg_spell_check: Option<SpellCheckFn>,
     pub score_english: Option<ScoreFn>,
@@ -74,7 +88,9 @@ pub struct LanguageDetector {
     /// Cyrillic and establish Bulgarian flow — the mirror image of
     /// `user_latin_words` — so a word missing from the dictionary
     /// ("клипчета", "трейлъри") can be taught once instead of editing files.
-    user_bg_words: HashSet<String>,
+    /// Words the user pinned to a specific language with ⌥⌘B, stored as
+    /// the lowercase Latin spelling they typed mapped to the pack index.
+    user_forced_words: HashMap<String, usize>,
 
     last_word_language: DetectedLanguage,
     recent_languages: Vec<DetectedLanguage>,
@@ -100,19 +116,28 @@ pub struct ContextSnapshot {
 }
 
 impl LanguageDetector {
+    /// The default two-language setup: English plus Bulgarian.
     pub fn new(en_dict: HashSet<String>, bg_dict: HashSet<String>) -> Self {
+        Self::with_packs(vec![packs::english(en_dict), packs::bulgarian(bg_dict)])
+    }
+
+    /// Any number of languages. The first pack must be the Latin base.
+    pub fn with_packs(packs: Vec<LanguagePack>) -> Self {
+        debug_assert!(
+            packs.first().map_or(false, |p| p.is_latin_base),
+            "the first pack must be the Latin base"
+        );
         Self {
-            en_dict,
-            bg_dict,
+            packs,
             en_spell_check: None,
             bg_spell_check: None,
             score_english: None,
             score_bulgarian: None,
-            default_language: DetectedLanguage::English,
+            default_language: DetectedLanguage::ENGLISH,
             autocorrect_enabled: false,
             typo_correction_enabled: true,
             user_latin_words: HashSet::new(),
-            user_bg_words: HashSet::new(),
+            user_forced_words: HashMap::new(),
             last_word_language: DetectedLanguage::Uncertain,
             recent_languages: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
             recent_confidences: Vec::with_capacity(CONTEXT_WINDOW_SIZE),
@@ -151,24 +176,32 @@ impl LanguageDetector {
     /// Remember a word as "always Bulgarian". Stored as the lowercase Latin
     /// spelling; matching in `process_word` is case-insensitive.
     pub fn add_user_bg_word(&mut self, word: &str) {
+        // Kept for the ⌥⌘B shortcut, which pins to the first non-base
+        // language. `add_user_forced_word` is the general form.
+        let target = (1..self.packs.len()).next().unwrap_or(0);
+        self.add_user_forced_word(word, target);
+    }
+
+    /// Pin `word` to a specific language for good.
+    pub fn add_user_forced_word(&mut self, word: &str, language: usize) {
         let w = word.trim().to_lowercase();
-        if !w.is_empty() {
-            self.user_bg_words.insert(w);
+        if !w.is_empty() && language < self.packs.len() {
+            self.user_forced_words.insert(w, language);
         }
     }
 
     /// Forget a previously forced word. Returns true if it was present.
     pub fn remove_user_bg_word(&mut self, word: &str) -> bool {
-        self.user_bg_words.remove(&word.trim().to_lowercase())
+        self.user_forced_words.remove(&word.trim().to_lowercase()).is_some()
     }
 
     /// Forget all forced-Bulgarian words.
     pub fn clear_user_bg_words(&mut self) {
-        self.user_bg_words.clear();
+        self.user_forced_words.clear();
     }
 
     pub fn user_bg_word_count(&self) -> usize {
-        self.user_bg_words.len()
+        self.user_forced_words.len()
     }
 
     pub fn reset_context(&mut self) {
@@ -240,8 +273,18 @@ impl LanguageDetector {
         (pending_result, next_result)
     }
 
+    /// The `is_latin_word` gate uses the union of every enabled pack's keys,
+    /// so a word is "typeable" if any enabled language could have produced it.
+    fn is_typeable(&self, word: &str) -> bool {
+        !word.is_empty()
+            && word.chars().all(|c| {
+                c.is_ascii_alphabetic()
+                    || self.packs.iter().any(|p| p.has_exclusive_key(&c.to_string()))
+            })
+    }
+
     pub fn process_word(&mut self, word: &str) -> WordResult {
-        if !is_latin_word(word) {
+        if !self.is_typeable(word) {
             return WordResult {
                 original: word.to_string(),
                 converted: word.to_string(),
@@ -264,218 +307,112 @@ impl LanguageDetector {
             };
         }
 
-        // 0b. Forced-Bulgarian words: the user pressed ⌥⌘B on this word once,
-        // so it always converts to Cyrillic and establishes Bulgarian flow —
-        // the mirror image of the learned-Latin pass-through above. This lets
-        // an out-of-dictionary word be taught without editing any files.
-        if self.user_bg_words.contains(&lower) {
-            let cyrillic = to_cyrillic(word);
-            self.push_context(DetectedLanguage::Bulgarian, 1.0);
+        // 0b. Words the user forced into a language with ⌥⌘B. The mirror image
+        // of the learned-Latin pass-through above: it always converts and
+        // always leads the flow, so an out-of-dictionary word can be taught
+        // once instead of editing files.
+        if let Some(&target) = self.user_forced_words.get(&lower) {
+            let converted = self.packs[target].transliterate(word);
+            self.push_context(DetectedLanguage::Lang(target), 1.0);
             self.track_latin_word(word);
             return WordResult {
                 original: word.to_string(),
-                converted: cyrillic,
-                language: DetectedLanguage::Bulgarian,
+                converted,
+                language: DetectedLanguage::Lang(target),
                 confidence: 1.0,
             };
         }
 
-        // 1. English abbreviation expansion (unless we're in a Bulgarian flow)
+        // 1. Abbreviation expansion, when the user opted into autocorrect. The
+        // base language may expand at any time; another language only while
+        // its own flow is running, so "mn" does not become "много" mid-English.
         if self.autocorrect_enabled {
-            if let Some(expanded) = expand_english_abbreviation(&lower) {
-                if self.last_word_language != DetectedLanguage::Bulgarian {
-                    self.push_context(DetectedLanguage::English, 1.0);
-                    self.track_latin_word(word);
-                    return WordResult {
-                        original: word.to_string(),
-                        converted: expanded.to_string(),
-                        language: DetectedLanguage::English,
-                        confidence: 1.0,
-                    };
-                }
-            }
-
-            // 2. Bulgarian abbreviation expansion (only in Bulgarian flow)
-            if let Some(bg_expanded) = expand_bulgarian_abbreviation(&lower) {
-                if self.last_word_language == DetectedLanguage::Bulgarian {
-                    self.push_context(DetectedLanguage::Bulgarian, 1.0);
-                    self.track_latin_word(word);
-                    return WordResult {
-                        original: word.to_string(),
-                        converted: bg_expanded.to_string(),
-                        language: DetectedLanguage::Bulgarian,
-                        confidence: 1.0,
-                    };
+            for (idx, pack) in self.packs.iter().enumerate() {
+                if let Some(expanded) = pack.abbreviations.get(&lower) {
+                    let in_flow = self.last_word_language == DetectedLanguage::Lang(idx);
+                    let base_ok = pack.is_latin_base
+                        && !matches!(self.last_word_language, DetectedLanguage::Lang(i) if i != idx);
+                    if in_flow || base_ok {
+                        let out = expanded.clone();
+                        self.push_context(DetectedLanguage::Lang(idx), 1.0);
+                        self.track_latin_word(word);
+                        return WordResult {
+                            original: word.to_string(),
+                            converted: out,
+                            language: DetectedLanguage::Lang(idx),
+                            confidence: 1.0,
+                        };
+                    }
                 }
             }
         }
 
-        // 3. Convert to Cyrillic, check both dictionaries
-        let cyrillic = to_cyrillic(word);
-        let cyrillic_lower = cyrillic.to_lowercase();
+        // 2. Ask every enabled language the same question: rendered in your
+        // script, is this a word you know? This replaces the old pair of
+        // is_english / is_bulgarian flags and is what makes N languages work.
+        let candidates: Vec<String> =
+            self.packs.iter().map(|p| p.transliterate(word)).collect();
+        let matches: Vec<usize> = (0..self.packs.len())
+            .filter(|&i| self.packs[i].contains(&candidates[i]))
+            .collect();
 
-        let is_english = self.en_dict.contains(&lower);
-        let is_bulgarian = self.bg_dict.contains(&cyrillic_lower);
+        // A key that only one language uses ("[", "\\", "§") is deliberate:
+        // nobody types it mid-English by accident.
+        let exclusive: Vec<usize> = (0..self.packs.len())
+            .filter(|&i| !self.packs[i].is_latin_base && self.packs[i].has_exclusive_key(word))
+            .collect();
 
-        let both = is_bulgarian && is_english;
         let streak_len = self.consecutive_streak_length();
-
         let detected: DetectedLanguage;
         let mut output: String;
         let confidence: f64;
 
-        if both {
-            let r = self.resolve_ambiguous(word, &cyrillic);
+        if matches.len() > 1 {
+            let r = self.resolve_ambiguous(word, &candidates, &matches);
             detected = r.0;
             output = r.1;
             confidence = r.2;
-        } else if is_bulgarian && !is_english {
-            if self.last_word_language == DetectedLanguage::English
-                && streak_len >= 3
-                && lower.chars().count() <= 3
-            {
-                detected = DetectedLanguage::English;
-                output = word.to_string();
+        } else if matches.len() == 1 {
+            let only = matches[0];
+            // A short word can ride an established streak in another language
+            // ONLY when the flip produces a real word there — otherwise we
+            // would be inventing spelling. ("we" must not become "ве".)
+            let rider = if lower.chars().count() <= 3 && streak_len >= 3 {
+                self.last_word_language
+                    .index()
+                    .filter(|&i| i != only && self.packs[i].contains(&candidates[i]))
+            } else {
+                None
+            };
+            if let Some(i) = rider {
+                detected = DetectedLanguage::Lang(i);
+                output = candidates[i].clone();
                 confidence = 0.6;
             } else {
-                detected = DetectedLanguage::Bulgarian;
-                output = cyrillic.clone();
+                detected = DetectedLanguage::Lang(only);
+                output = candidates[only].clone();
                 confidence = 1.0;
             }
-        } else if is_english && !is_bulgarian {
-            // A real English word whose Cyrillic form is NOT in the Bulgarian
-            // dictionary. There used to be a "short word mid-BG-streak rides
-            // the flow" exception here, mirroring the branch above, but in
-            // THIS direction the branch condition guarantees the flip produces
-            // a non-word: `!is_bulgarian` means `cyrillic` was already looked
-            // up and missed. It turned "we will order only" typed after a
-            // Bulgarian sentence into "ве will ордер only" — "ве" is not a
-            // word in any language.
-            //
-            // The mirror branch (BG-only word mid-EN-streak stays Latin) is
-            // kept, because its output is still the Latin word the user typed
-            // and the EN dictionary is Scrabble-derived, so it genuinely
-            // misses ordinary English tokens ("ok", brands). The 234k-entry,
-            // fully-inflected BG dictionary has no such excuse: a miss there
-            // really does mean "not a Bulgarian word".
-            detected = DetectedLanguage::English;
-            output = word.to_string();
-            confidence = 1.0;
         } else {
-            // In NEITHER dictionary. Latin is the default: we don't recognise
-            // the word in either language, so we never guess a Cyrillic
-            // transliteration here. The 234k-entry, fully-inflected BG
-            // dictionary means an unknown word is almost always genuinely
-            // foreign (a brand like "Windows", a name, an English word) — not
-            // a mistyped Bulgarian one — so transliterating it was the wrong
-            // default.
-            //
-            // Exception: a word containing a Cyrillic-only key (\ [ ] ` …) is
-            // a deliberate Cyrillic letter the user typed — nobody puts those
-            // mid-word in English — so it overrides the Latin default and even
-            // an English streak.
-            let cyrillic_key_signal = contains_cyrillic_only_key(word);
-
-            if self.last_word_language == DetectedLanguage::English
-                && streak_len >= 2
-                && !cyrillic_key_signal
-            {
-                // Continue an English streak; spell-correct only when
-                // autocorrect is on. Output stays Latin either way.
-                let corrected = if self.autocorrect_enabled {
-                    correct_english(word, &self.en_dict, self.en_spell_check)
-                } else {
-                    None
-                };
-                if let Some(corrected) = corrected {
-                    detected = DetectedLanguage::English;
-                    output = corrected;
-                    confidence = 0.8;
-                } else {
-                    detected = DetectedLanguage::English;
-                    output = word.to_string();
-                    confidence = 0.5;
-                }
-            } else if !self.autocorrect_enabled {
-                // Default path (autocorrect off). First give a mid-BG-flow
-                // word one shot at typo rescue ("изтриеп" → "изтриеш",
-                // "можешда" → "можеш да"); if that declines, keep the word
-                // verbatim in Latin and stay transparent (Uncertain) so a
-                // lone unknown word neither transliterates nor flips the
-                // surrounding flow.
-                if let Some(fixed) = self.try_bulgarian_typo_fix(word, &cyrillic_lower) {
-                    detected = DetectedLanguage::Bulgarian;
-                    output = fixed;
-                    confidence = 0.85;
-                } else if cyrillic_key_signal {
-                    // No dictionary/typo match, but the Cyrillic-only key
-                    // makes the intent clear — convert verbatim ("превютата").
-                    detected = DetectedLanguage::Bulgarian;
-                    output = cyrillic.clone();
-                    confidence = 0.9;
-                } else {
-                    detected = DetectedLanguage::Uncertain;
-                    output = word.to_string();
-                    confidence = 0.0;
-                }
-            } else if cyrillic_key_signal {
-                // Autocorrect on, but the Cyrillic-only key still pins the
-                // language to Bulgarian; spell-correct toward it if we can.
-                detected = DetectedLanguage::Bulgarian;
-                output = correct_bulgarian(&cyrillic, &self.bg_dict, self.bg_spell_check)
-                    .unwrap_or_else(|| cyrillic.clone());
-                confidence = 0.9;
-            } else {
-                // Autocorrect opt-in: allow aggressive two-language spell
-                // correction, which may still recover a mistyped Bulgarian word.
-                let en_spell = correct_english(word, &self.en_dict, self.en_spell_check);
-                let bg_spell = correct_bulgarian(&cyrillic, &self.bg_dict, self.bg_spell_check);
-
-                if bg_spell.is_some() && en_spell.is_none() {
-                    detected = DetectedLanguage::Bulgarian;
-                    output = bg_spell.unwrap();
-                    confidence = 0.8;
-                } else if en_spell.is_some() && bg_spell.is_none() {
-                    detected = DetectedLanguage::English;
-                    output = en_spell.unwrap();
-                    confidence = 0.8;
-                } else if en_spell.is_some() && bg_spell.is_some() {
-                    match self.last_word_language {
-                        DetectedLanguage::Bulgarian => {
-                            detected = DetectedLanguage::Bulgarian;
-                            output = bg_spell.unwrap();
-                            confidence = 0.7;
-                        }
-                        DetectedLanguage::English => {
-                            detected = DetectedLanguage::English;
-                            output = en_spell.unwrap();
-                            confidence = 0.7;
-                        }
-                        DetectedLanguage::Uncertain => {
-                            let r = self.resolve_unknown(word, &cyrillic);
-                            detected = r.0;
-                            output = r.1;
-                            confidence = r.2;
-                        }
-                    }
-                } else {
-                    let r = self.resolve_unknown(word, &cyrillic);
-                    detected = r.0;
-                    output = r.1;
-                    confidence = r.2;
-                }
-            }
+            // In NO dictionary. The base language is the default: an unknown
+            // word is far more often foreign ("Windows", "dpi") than a
+            // mistyped one, so we never guess a transliteration here.
+            let r = self.resolve_no_match(word, &candidates, &exclusive, streak_len);
+            detected = r.0;
+            output = r.1;
+            confidence = r.2;
         }
 
-        // 4. Apply spell correction AFTER detection for high-confidence matches
-        if self.autocorrect_enabled {
-            if detected == DetectedLanguage::English && confidence >= 1.0 {
-                if let Some(corrected) = correct_english(&output, &self.en_dict, self.en_spell_check) {
-                    output = corrected;
-                }
-            } else if detected == DetectedLanguage::Bulgarian && confidence >= 1.0 {
-                if let Some(corrected) = correct_bulgarian(&output, &self.bg_dict, self.bg_spell_check) {
-                    output = corrected;
+        // 3. Spell correction after detection, for confident matches only.
+        if self.autocorrect_enabled && confidence >= 1.0 {
+            if let Some(i) = detected.index() {
+                let corrected = if self.packs[i].is_latin_base {
+                    correct_english(&output, &self.packs[i].dict, self.en_spell_check)
+                } else {
+                    correct_bulgarian(&output, &self.packs[i].dict, self.bg_spell_check)
+                };
+                if let Some(c) = corrected {
+                    output = c;
                 }
             }
         }
@@ -499,164 +436,196 @@ impl LanguageDetector {
     /// - never for capitalized words (brands/proper nouns: "Windows")
     /// - never for short words (<5 letters: "dpi", "css", "png" are
     ///   abbreviations, not typos)
-    fn try_bulgarian_typo_fix(&self, word: &str, cyrillic_lower: &str) -> Option<String> {
-        if !self.typo_correction_enabled {
-            return None;
+
+    /// Pick between languages that ALL recognise the word. Ordered by how
+    /// much the evidence is worth: a neighbour we were told about, then the
+    /// word to the left when it was decisive, then the recent majority, then
+    /// natural-language scoring, then the user's default.
+    fn resolve_ambiguous(
+        &self,
+        word: &str,
+        candidates: &[String],
+        matches: &[usize],
+    ) -> (DetectedLanguage, String, f64) {
+        let pick = |i: usize, conf: f64| (DetectedLanguage::Lang(i), candidates[i].clone(), conf);
+
+        // The word to the RIGHT, when the caller looked ahead for us. We only
+        // get a hint because the left side was inconclusive, so it leads.
+        if let Some(DetectedLanguage::Lang(i)) = self.right_hint {
+            if matches.contains(&i) {
+                return pick(i, 0.9);
+            }
         }
-        if self.last_word_language != DetectedLanguage::Bulgarian {
+
+        // The word immediately before, when it was pinned by an exact hit in
+        // exactly one dictionary — the strongest signal we record, and fresher
+        // than the window. Without this, an English phrase started mid-
+        // Bulgarian-text loses every ambiguous word back to the majority.
+        if self.last_confidence() >= 1.0 {
+            if let Some(i) = self.last_word_language.index() {
+                if matches.contains(&i) {
+                    return pick(i, 0.9);
+                }
+            }
+        }
+
+        if let Some(i) = self.dominant_recent_language().index() {
+            if matches.contains(&i) {
+                return pick(i, 0.9);
+            }
+        }
+        if let Some(i) = self.last_word_language.index() {
+            if matches.contains(&i) {
+                return pick(i, 0.8);
+            }
+        }
+
+        // Nothing in the context helps — ask the platform's language scorer,
+        // giving it the recent words as context rather than the word alone.
+        let mut phrase = self.recent_latin_words.clone();
+        phrase.push(word.to_string());
+        let phrase = phrase.join(" ");
+        let mut best: Option<(usize, f64)> = None;
+        for &i in matches {
+            let rendered = self.packs[i].transliterate(&phrase);
+            let score = if self.packs[i].is_latin_base {
+                self.score_english.map(|f| f(&rendered)).unwrap_or(0.0)
+            } else {
+                self.score_bulgarian.map(|f| f(&rendered)).unwrap_or(0.0)
+            };
+            if best.map_or(true, |(_, b)| score > b) {
+                best = Some((i, score));
+            }
+        }
+        if let Some((i, score)) = best {
+            // Only trust scoring when it is clearly ahead of the runner-up.
+            let runner_up = matches
+                .iter()
+                .filter(|&&j| j != i)
+                .map(|&j| {
+                    let rendered = self.packs[j].transliterate(&phrase);
+                    if self.packs[j].is_latin_base {
+                        self.score_english.map(|f| f(&rendered)).unwrap_or(0.0)
+                    } else {
+                        self.score_bulgarian.map(|f| f(&rendered)).unwrap_or(0.0)
+                    }
+                })
+                .fold(0.0f64, f64::max);
+            if score > runner_up + 0.1 {
+                return pick(i, score);
+            }
+        }
+
+        if let Some(i) = self.default_language.index() {
+            if matches.contains(&i) {
+                return pick(i, 0.5);
+            }
+        }
+        pick(matches[0], 0.5)
+    }
+
+    /// Nothing recognised the word. Decide whether to leave it as typed (the
+    /// usual answer) or rescue it into a language.
+    fn resolve_no_match(
+        &self,
+        word: &str,
+        candidates: &[String],
+        exclusive: &[usize],
+        streak_len: usize,
+    ) -> (DetectedLanguage, String, f64) {
+        // A key only one language uses proves the intent, and outranks even a
+        // running streak in another language ("prew\tata" → "превютата").
+        let exclusive_lang = exclusive.first().copied();
+
+        if exclusive_lang.is_none()
+            && self.last_word_language == DetectedLanguage::ENGLISH
+            && streak_len >= 2
+        {
+            let corrected = if self.autocorrect_enabled {
+                correct_english(word, &self.packs[0].dict, self.en_spell_check)
+            } else {
+                None
+            };
+            return match corrected {
+                Some(c) => (DetectedLanguage::ENGLISH, c, 0.8),
+                None => (DetectedLanguage::ENGLISH, word.to_string(), 0.5),
+            };
+        }
+
+        // A word mid-flow in a transliterating language gets one shot at typo
+        // repair, in THAT language.
+        if let Some(i) = self.last_word_language.index() {
+            if !self.packs[i].is_latin_base {
+                if let Some(fixed) = self.try_typo_fix(word, &candidates[i], i) {
+                    return (DetectedLanguage::Lang(i), fixed, 0.85);
+                }
+            }
+        }
+
+        if let Some(i) = exclusive_lang {
+            let out = if self.autocorrect_enabled {
+                correct_bulgarian(&candidates[i], &self.packs[i].dict, self.bg_spell_check)
+                    .unwrap_or_else(|| candidates[i].clone())
+            } else {
+                candidates[i].clone()
+            };
+            return (DetectedLanguage::Lang(i), out, 0.9);
+        }
+
+        // Leave it alone, and stay transparent to the streak so one unknown
+        // word neither transliterates nor flips the surrounding flow.
+        (DetectedLanguage::Uncertain, word.to_string(), 0.0)
+    }
+
+    /// Typo rescue for a word in NO dictionary, against one language.
+    /// Guards keep the "unknown words stay as typed" policy intact: only
+    /// mid-flow, never for capitalised words (brands), never for short ones.
+    fn try_typo_fix(&self, word: &str, candidate: &str, lang: usize) -> Option<String> {
+        if !self.typo_correction_enabled {
             return None;
         }
         if word.chars().next().map_or(false, |c| c.is_uppercase()) {
             return None;
         }
-        if cyrillic_lower.chars().count() < 5 {
+        let lowered = candidate.to_lowercase();
+        if lowered.chars().count() < 5 {
             return None;
         }
-
-        if let Some(fixed) = best_bulgarian_typo_fix(cyrillic_lower, &self.bg_dict) {
+        let pack = &self.packs[lang];
+        if let Some(fixed) = best_typo_fix(&lowered, pack) {
             return Some(fixed);
         }
-        split_into_two_words(cyrillic_lower, &self.bg_dict)
+        split_into_two_words(&lowered, &pack.dict)
     }
 
-    fn resolve_ambiguous(&self, word: &str, cyrillic: &str) -> (DetectedLanguage, String, f64) {
-        // The word to the RIGHT wins first when the caller looked ahead for
-        // us. We only ever get a hint because the caller judged the left side
-        // inconclusive and held this word back, so the neighbour it found is
-        // the best evidence available — "лаптоп" vs "laptop" is settled by the
-        // company the word keeps, in whichever direction that company sits.
-        if let Some(hint) = self.right_hint {
-            match hint {
-                DetectedLanguage::Bulgarian => {
-                    return (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.9)
-                }
-                DetectedLanguage::English => {
-                    return (DetectedLanguage::English, word.to_string(), 0.9)
-                }
-                DetectedLanguage::Uncertain => {}
-            }
-        }
-
-        // The word immediately before wins outright when it was decided by an
-        // exact hit in exactly ONE dictionary (confidence 1.0) — that is the
-        // strongest signal we ever record, and it is fresher than the 6-word
-        // majority. Without this, an English phrase started mid-Bulgarian-text
-        // ("…този имейл we will order only") lost every ambiguous word back to
-        // the trailing Bulgarian majority: "order" came out "ордер" even
-        // though the preceding "will" was unambiguously English.
-        if self.last_confidence() >= 1.0 {
-            match self.last_word_language {
-                DetectedLanguage::Bulgarian => {
-                    return (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.9)
-                }
-                DetectedLanguage::English => {
-                    return (DetectedLanguage::English, word.to_string(), 0.9)
-                }
-                DetectedLanguage::Uncertain => {}
-            }
-        }
-
-        let dominant = self.dominant_recent_language();
-        if dominant == DetectedLanguage::Bulgarian {
-            return (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.9);
-        } else if dominant == DetectedLanguage::English {
-            return (DetectedLanguage::English, word.to_string(), 0.9);
-        }
-
-        if self.last_word_language == DetectedLanguage::Bulgarian {
-            return (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.8);
-        } else if self.last_word_language == DetectedLanguage::English {
-            return (DetectedLanguage::English, word.to_string(), 0.8);
-        }
-
-        // Context-based NL scoring (callback)
-        let mut all = self.recent_latin_words.clone();
-        all.push(word.to_string());
-        let context_phrase = all.join(" ");
-        let context_cyrillic = to_cyrillic(&context_phrase);
-
-        let en_score = self.score_english.map(|f| f(&context_phrase)).unwrap_or(0.0);
-        let bg_score = self.score_bulgarian.map(|f| f(&context_cyrillic)).unwrap_or(0.0);
-
-        if bg_score > en_score + 0.1 {
-            return (DetectedLanguage::Bulgarian, cyrillic.to_string(), bg_score);
-        } else if en_score > bg_score + 0.1 {
-            return (DetectedLanguage::English, word.to_string(), en_score);
-        }
-
-        match self.default_language {
-            DetectedLanguage::Bulgarian => (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.5),
-            _ => (DetectedLanguage::English, word.to_string(), 0.5),
-        }
-    }
-
-    fn resolve_unknown(&self, word: &str, cyrillic: &str) -> (DetectedLanguage, String, f64) {
-        if self.last_word_language == DetectedLanguage::Bulgarian {
-            return (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.7);
-        } else if self.last_word_language == DetectedLanguage::English {
-            return (DetectedLanguage::English, word.to_string(), 0.7);
-        }
-
-        let en_score = self.score_english.map(|f| f(word)).unwrap_or(0.0);
-        let bg_score = self.score_bulgarian.map(|f| f(cyrillic)).unwrap_or(0.0);
-
-        if self.recent_latin_words.len() >= 2 {
-            let mut all = self.recent_latin_words.clone();
-            all.push(word.to_string());
-            let context_phrase = all.join(" ");
-            let context_cyrillic = to_cyrillic(&context_phrase);
-            let en_ctx = self.score_english.map(|f| f(&context_phrase)).unwrap_or(0.0);
-            let bg_ctx = self.score_bulgarian.map(|f| f(&context_cyrillic)).unwrap_or(0.0);
-
-            let blend_en = en_score * 0.4 + en_ctx * 0.6;
-            let blend_bg = bg_score * 0.4 + bg_ctx * 0.6;
-
-            if blend_bg > 0.5 && blend_bg > blend_en + 0.15 {
-                return (DetectedLanguage::Bulgarian, cyrillic.to_string(), blend_bg);
-            } else if blend_en > 0.5 && blend_en > blend_bg + 0.15 {
-                return (DetectedLanguage::English, word.to_string(), blend_en);
-            }
-        } else {
-            if bg_score > 0.5 && bg_score > en_score + 0.15 {
-                return (DetectedLanguage::Bulgarian, cyrillic.to_string(), bg_score);
-            } else if en_score > 0.5 && en_score > bg_score + 0.15 {
-                return (DetectedLanguage::English, word.to_string(), en_score);
-            }
-        }
-
-        match self.default_language {
-            DetectedLanguage::Bulgarian => (DetectedLanguage::Bulgarian, cyrillic.to_string(), 0.3),
-            _ => (DetectedLanguage::English, word.to_string(), 0.3),
-        }
-    }
-
-    /// Confidence of the most recent decided (non-Uncertain) word; 0.0 when
-    /// nothing has been decided yet. Pairs with `last_word_language`, which
-    /// `push_context` keeps in step with the tail of `recent_confidences`.
+    /// Confidence of the most recent decided word; 0.0 when nothing has
+    /// been decided yet.
     fn last_confidence(&self) -> f64 {
         self.recent_confidences.last().copied().unwrap_or(0.0)
     }
 
+    /// Which language dominates the recent window, counting only
+    /// high-confidence decisions. None when there is no clear leader.
     fn dominant_recent_language(&self) -> DetectedLanguage {
-        let mut bg = 0;
-        let mut en = 0;
+        let mut counts = vec![0usize; self.packs.len()];
         for (idx, lang) in self.recent_languages.iter().enumerate() {
             if self.recent_confidences[idx] < 0.9 {
                 continue;
             }
-            match lang {
-                DetectedLanguage::Bulgarian => bg += 1,
-                DetectedLanguage::English => en += 1,
-                _ => {}
+            if let Some(i) = lang.index() {
+                counts[i] += 1;
             }
         }
-        if bg > en {
-            DetectedLanguage::Bulgarian
-        } else if en > bg {
-            DetectedLanguage::English
-        } else {
-            DetectedLanguage::Uncertain
+        let best = counts.iter().copied().max().unwrap_or(0);
+        if best == 0 {
+            return DetectedLanguage::Uncertain;
         }
+        // A tie is not a majority.
+        if counts.iter().filter(|&&c| c == best).count() > 1 {
+            return DetectedLanguage::Uncertain;
+        }
+        let winner = counts.iter().position(|&c| c == best).unwrap();
+        DetectedLanguage::Lang(winner)
     }
 
     fn consecutive_streak_length(&self) -> usize {
@@ -720,24 +689,24 @@ mod tests {
     fn english_sentence_stays_english() {
         let mut d = LanguageDetector::new(english_dict(), bulgarian_dict());
         let result = d.process_word("hello");
-        assert_eq!(result.language, DetectedLanguage::English);
+        assert_eq!(result.language, DetectedLanguage::ENGLISH);
         assert_eq!(result.converted, "hello");
 
         let result = d.process_word("world");
-        assert_eq!(result.language, DetectedLanguage::English);
+        assert_eq!(result.language, DetectedLanguage::ENGLISH);
     }
 
     #[test]
     fn bulgarian_sentence_converts() {
         let mut d = LanguageDetector::new(english_dict(), bulgarian_dict());
         let r = d.process_word("napisah");
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
         assert_eq!(r.converted, "написах");
 
         let r = d.process_word("now");
         // "now" is in EN dict; without context yet it's ambiguous between EN ("now")
         // and BG ("нов"). At this point the previous word was BG, so flow follows BG.
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
         assert_eq!(r.converted, "нов");
     }
 
@@ -747,7 +716,7 @@ mod tests {
         d.autocorrect_enabled = true; // off by default
         let r = d.process_word("u");
         assert_eq!(r.converted, "you");
-        assert_eq!(r.language, DetectedLanguage::English);
+        assert_eq!(r.language, DetectedLanguage::ENGLISH);
     }
 
     #[test]
@@ -803,7 +772,7 @@ mod tests {
             ("golemi", "големи"), ("brojki", "бройки"), ("ne", "не"),
         ] {
             let r = d.process_word(word);
-            assert_eq!(r.language, DetectedLanguage::Bulgarian,
+            assert_eq!(r.language, DetectedLanguage::BULGARIAN,
                 "word {word:?} should be Bulgarian, got {:?}", r.language);
             assert_eq!(r.converted, expected, "word {word:?}: wrong conversion");
         }
@@ -838,7 +807,7 @@ mod tests {
         let mut converted = Vec::new();
         for (latin, expected_cyr) in pairs {
             let r = d.process_word(latin);
-            assert_eq!(r.language, DetectedLanguage::Bulgarian,
+            assert_eq!(r.language, DetectedLanguage::BULGARIAN,
                 "{latin:?} should land in Bulgarian, got {:?}", r.language);
             assert_eq!(r.converted, expected_cyr,
                 "{latin:?}: expected {expected_cyr:?}, got {:?}", r.converted);
@@ -883,7 +852,7 @@ mod tests {
         let r = d.process_word("prew\\tata");
         assert_eq!(r.converted, "превютата",
             "word with a Cyrillic-only key ('\\') must convert, got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
         assert_ne!(r.converted, "prew\\tata", "the literal backslash must not survive");
 
         // And it establishes BG flow for the rest of the sentence.
@@ -909,7 +878,7 @@ mod tests {
         let r = d.process_word("ka[ta");
         assert_eq!(r.converted, "кашта",
             "a Cyrillic-only key must override the English streak, got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -949,12 +918,12 @@ mod tests {
         let r = d.process_word("videa");
         assert_eq!(r.converted, "видеа",
             "exact dict entry must win, not the typo 'видра', got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
 
         let r = d.process_word("treylyri");
         assert_eq!(r.converted, "трейлъри",
             "treylyri (треълъри) must typo-fix to трейлъри, got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -971,7 +940,7 @@ mod tests {
         let r = d.process_word("klip`eta");
         assert_eq!(r.converted, "клипчета",
             "forced word must convert verbatim, got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
 
         // It led the flow, so a following short BG word rides the streak.
         let r = d.process_word("sa");
@@ -998,10 +967,10 @@ mod tests {
 
         // Establish a Bulgarian streak (both BG-only words).
         let r = d.process_word("mnogo");
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
         assert_eq!(r.converted, "много");
         let r = d.process_word("hubawo");
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
         assert_eq!(r.converted, "хубаво");
 
         // The brand name must stay Latin, not become "Виндовс".
@@ -1016,7 +985,7 @@ mod tests {
         let r = d.process_word("nali");
         assert_eq!(r.converted, "нали",
             "BG flow must continue after the proper noun, got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -1042,7 +1011,7 @@ mod tests {
         // The Bulgarian flow must survive an unknown Latin word.
         let r = d.process_word("nali");
         assert_eq!(r.converted, "нали");
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -1061,11 +1030,11 @@ mod tests {
         // Phonetic map is QWERTY-position based: в is typed 'w' (not 'v').
         let r = d.process_word("towa");
         assert_eq!(r.converted, "това");
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
 
         let r = d.process_word("na");
         assert_eq!(r.converted, "на");
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
 
         // The number is non-alphabetic — passes through, context untouched.
         let r = d.process_word("300");
@@ -1103,7 +1072,7 @@ mod tests {
         let r = d.process_word("iztriep");
         assert_eq!(r.converted, "изтриеш",
             "typo 'изтриеп' must correct to 'изтриеш', got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -1119,7 +1088,7 @@ mod tests {
         let r = d.process_word("iztire["); // изтиреш
         assert_eq!(r.converted, "изтриеш",
             "transposed letters must be corrected, got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -1134,7 +1103,7 @@ mod tests {
         let r = d.process_word("move[da"); // можешда
         assert_eq!(r.converted, "можеш да",
             "joined words must be split, got {:?}", r.converted);
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -1239,7 +1208,7 @@ mod tests {
         // The Bulgarian flow must survive the learned word.
         let r = d.process_word("nali");
         assert_eq!(r.converted, "нали");
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -1281,14 +1250,14 @@ mod tests {
         ] {
             let r = d.process_word(latin);
             assert_eq!(r.converted, cyr, "setup word {latin:?} should convert");
-            assert_eq!(r.language, DetectedLanguage::Bulgarian);
+            assert_eq!(r.language, DetectedLanguage::BULGARIAN);
         }
 
         // The English phrase must come through verbatim.
         let mut out = Vec::new();
         for word in ["we", "will", "order", "only"] {
             let r = d.process_word(word);
-            assert_eq!(r.language, DetectedLanguage::English,
+            assert_eq!(r.language, DetectedLanguage::ENGLISH,
                 "{word:?} should be English, got {:?}", r.language);
             out.push(r.converted);
         }
@@ -1313,7 +1282,7 @@ mod tests {
         assert_eq!(r.converted, "we",
             "EN-only short word must not flip to the non-word 'ве', got {:?}", r.converted);
         assert_ne!(r.converted, "ве");
-        assert_eq!(r.language, DetectedLanguage::English);
+        assert_eq!(r.language, DetectedLanguage::ENGLISH);
     }
 
     #[test]
@@ -1331,7 +1300,7 @@ mod tests {
         for w in ["towa", "e", "mnogo", "hubawo", "nali"] {
             d.process_word(w);
         }
-        assert_eq!(d.process_word("will").language, DetectedLanguage::English);
+        assert_eq!(d.process_word("will").language, DetectedLanguage::ENGLISH);
         let r = d.process_word("order");
         assert_eq!(r.converted, "order",
             "decisive English predecessor must win over the BG majority, got {:?}", r.converted);
@@ -1362,7 +1331,7 @@ mod tests {
         let (p, n) = d.resolve_pending("laptop", "is");
         assert_eq!(p.converted, "laptop",
             "English neighbour should keep it Latin, got {:?}", p.converted);
-        assert_eq!(p.language, DetectedLanguage::English);
+        assert_eq!(p.language, DetectedLanguage::ENGLISH);
         assert_eq!(n.converted, "is");
 
         // Followed by a Bulgarian word → converts.
@@ -1370,7 +1339,7 @@ mod tests {
         let (p, n) = d.resolve_pending("laptop", "raboti");
         assert_eq!(p.converted, "лаптоп",
             "Bulgarian neighbour should convert it, got {:?}", p.converted);
-        assert_eq!(p.language, DetectedLanguage::Bulgarian);
+        assert_eq!(p.language, DetectedLanguage::BULGARIAN);
         assert_eq!(n.converted, "работи");
     }
 
@@ -1393,7 +1362,7 @@ mod tests {
             "both resolved words must be in the context");
         let r = d.process_word("dobre");
         assert_eq!(r.converted, "добре");
-        assert_eq!(r.language, DetectedLanguage::Bulgarian);
+        assert_eq!(r.language, DetectedLanguage::BULGARIAN);
     }
 
     #[test]
@@ -1460,6 +1429,69 @@ mod tests {
         d.clear_user_latin_words();
         let r = d.process_word("napisah");
         assert_eq!(r.converted, "написах");
+    }
+
+    #[test]
+    fn a_third_language_works_alongside_the_other_two() {
+        // The point of the refactor: nothing in the detector knows how many
+        // languages there are. Here English, Bulgarian and a made-up third
+        // Cyrillic language are all enabled at once, and each word goes to
+        // whichever one recognises it.
+        let en: HashSet<String> = ["the", "code", "is"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["много", "хубаво"].iter().map(|s| s.to_string()).collect();
+        // A third pack whose alphabet includes ы — a letter Bulgarian lacks.
+        let third: HashSet<String> = ["мыло", "было"].iter().map(|s| s.to_string()).collect();
+        let ru = crate::lang::LanguagePack::transliterated(
+            "ru", "Русский", third,
+            &[('m','м'), ('y','ы'), ('l','л'), ('o','о'), ('b','б')],
+            "аеиоуыэюя", &[],
+        );
+        let mut d = LanguageDetector::with_packs(vec![
+            crate::packs::english(en),
+            crate::packs::bulgarian(bg),
+            ru,
+        ]);
+        assert_eq!(d.packs.len(), 3);
+
+        // English word → English.
+        let r = d.process_word("code");
+        assert_eq!(r.converted, "code");
+        assert_eq!(r.language, DetectedLanguage::ENGLISH);
+
+        // Bulgarian word → Bulgarian (pack 1).
+        let r = d.process_word("mnogo");
+        assert_eq!(r.converted, "много");
+        assert_eq!(r.language, DetectedLanguage::Lang(1));
+
+        // A word only the THIRD language knows → third language, using its own
+        // keymap (y→ы, which Bulgarian maps to ъ).
+        let r = d.process_word("mylo");
+        assert_eq!(r.converted, "мыло",
+            "third language must win with its own keymap, got {:?}", r.converted);
+        assert_eq!(r.language, DetectedLanguage::Lang(2));
+    }
+
+    #[test]
+    fn unknown_word_still_stays_latin_with_many_languages() {
+        // The "leave it alone" default must survive having more languages to
+        // guess with — more packs must not mean more wrong guesses.
+        let en: HashSet<String> = HashSet::new();
+        let bg: HashSet<String> = ["много", "хубаво"].iter().map(|s| s.to_string()).collect();
+        let ru = crate::lang::LanguagePack::transliterated(
+            "ru", "Русский",
+            ["мыло"].iter().map(|s| s.to_string()).collect(),
+            &[('m','м'), ('y','ы'), ('l','л'), ('o','о')],
+            "аеиоуы", &[],
+        );
+        let mut d = LanguageDetector::with_packs(vec![
+            crate::packs::english(en), crate::packs::bulgarian(bg), ru,
+        ]);
+        d.process_word("mnogo");
+        d.process_word("hubawo");
+        let r = d.process_word("Windows");
+        assert_eq!(r.converted, "Windows",
+            "unknown word must stay Latin however many languages are enabled");
+        assert_eq!(r.language, DetectedLanguage::Uncertain);
     }
 
     #[test]

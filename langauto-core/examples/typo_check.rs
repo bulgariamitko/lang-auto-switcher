@@ -27,7 +27,7 @@ fn main() {
     let mut out = Vec::new();
     for w in sentence {
         let r = d.process_word(w);
-        out.push(format!("{} [{}]", r.converted, r.language.as_str()));
+        out.push(format!("{} [{}]", r.converted, format!("{:?}", r.language)));
     }
     println!("sentence: {}", out.join(" | "));
 
@@ -37,6 +37,6 @@ fn main() {
     d.process_word("mnogo");
     for w in ["dpi", "Windows", "css", "json", "iphone", "bitcoin", "photoshop", "google"] {
         let r = d.process_word(w);
-        println!("guard: {:10} -> {} [{}]", w, r.converted, r.language.as_str());
+        println!("guard: {:10} -> {} [{}]", w, r.converted, format!("{:?}", r.language));
     }
 }

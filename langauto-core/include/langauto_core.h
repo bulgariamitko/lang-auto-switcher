@@ -13,9 +13,13 @@ extern "C" {
 #endif
 
 // ---------- language enum ----------
+// Language is an INDEX into the detector's enabled-language list, so this is
+// no longer limited to two. 0 is always the Latin base (English) and 1 the
+// first added language, which keeps these two names accurate. UNCERTAIN moved
+// to -1 because 2 now means "the third language".
 #define LANGAUTO_LANG_ENGLISH   0
 #define LANGAUTO_LANG_BULGARIAN 1
-#define LANGAUTO_LANG_UNCERTAIN 2
+#define LANGAUTO_LANG_UNCERTAIN (-1)
 
 // ---------- opaque detector handle ----------
 typedef struct LangAutoDetector LangAutoDetector;
