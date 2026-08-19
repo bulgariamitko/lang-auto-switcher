@@ -893,9 +893,34 @@ class InputController: IMKInputController {
 
     @objc private func addLanguage(_ sender: NSMenuItem) {
         guard let code = sender.representedObject as? String else { return }
-        LanguagePackStore.addLanguage(code)
-        NSLog("LangAutoSwitcher: added language '%@' — restart to load it", code)
-        notifyLanguageChange(code)
+        let name = sender.title
+
+        // Fetch the word list before enabling the language, so we never end up
+        // with a language switched on that the detector cannot actually load.
+        if LanguagePackStore.isInstalled(code) {
+            LanguagePackStore.addLanguage(code)
+            notifyLanguageChange(name)
+            return
+        }
+
+        let progress = NSAlert()
+        progress.messageText = MenuStrings.t(.downloading, name)
+        progress.informativeText = ""
+        progress.addButton(withTitle: "OK")
+
+        DictionaryDownloader.install(code) { result in
+            switch result {
+            case .success:
+                LanguagePackStore.addLanguage(code)
+                self.notifyLanguageChange(name)
+            case .failure(let error):
+                let alert = NSAlert()
+                alert.messageText = MenuStrings.t(.noDictionary, name)
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
+        }
     }
 
     @objc private func removeLanguage(_ sender: NSMenuItem) {
