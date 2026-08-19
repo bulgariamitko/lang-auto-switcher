@@ -13,9 +13,13 @@ func makeRep(pixels: Int) -> NSBitmapImageRep {
         bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-    // Point size stays 16×16 so the 32px rep is tagged @2x (144 dpi).
-    rep.size = NSSize(width: 16, height: 16)
-
+    // Draw in PIXEL coordinates: leave rep.size at its pixel default so one
+    // point maps to one pixel, and scale every dimension explicitly below.
+    // Setting rep.size to 16×16 *here* would make the context scale by 2 for
+    // the 32px rep on top of the explicit `scale` factor — drawing the plate
+    // at 60px inside a 32px bitmap. That double-scaling is what produced the
+    // mangled @2x icon (the @1x rep was fine only because its scale is 1).
+    // The point size is applied after drawing, which is what tags it @2x.
     NSGraphicsContext.saveGraphicsState()
     let ctx = NSGraphicsContext(bitmapImageRep: rep)!
     NSGraphicsContext.current = ctx
@@ -40,6 +44,9 @@ func makeRep(pixels: Int) -> NSBitmapImageRep {
 
     ctx.flushGraphics()
     NSGraphicsContext.restoreGraphicsState()
+
+    // Now tag the bitmap as 16×16 points, so a 32px rep reads as @2x.
+    rep.size = NSSize(width: 16, height: 16)
     return rep
 }
 
