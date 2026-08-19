@@ -307,6 +307,19 @@ final class LanguageDetector {
         return activeLanguages[i]
     }
 
+    /// A language's name, written in the menu's own language: "български"
+    /// when the menu is Bulgarian, "Bulgarian" when it is English. Taken from
+    /// the system rather than a table, so it is right for all 150 languages.
+    /// Falls back to the keyboard layout's name ("Bulgarian – QWERTY"), which
+    /// is what the layout is called rather than what the language is called.
+    func languageName(for code: String) -> String {
+        let menuLocale = Locale(identifier: MenuStrings.current)
+        if let name = menuLocale.localizedString(forLanguageCode: code), !name.isEmpty {
+            return name
+        }
+        return languageNames[code] ?? code
+    }
+
     /// The index a language code occupies in the detector, if it is active.
     func index(of code: String) -> Int? {
         activeLanguages.firstIndex(of: code)

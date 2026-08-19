@@ -633,7 +633,7 @@ class InputController: IMKInputController {
         // Both problems disappear if every menu action is a plain top-level
         // item that takes no arguments and asks its question in a dialog.
         let active = detector.activeLanguages
-            .map { detector.languageNames[$0] ?? $0 }
+            .map { detector.languageName(for: $0) }
             .joined(separator: ", ")
         let header = NSMenuItem(title: MenuStrings.t(.languages) + ": " + active,
                                 action: nil, keyEquivalent: "")
@@ -705,19 +705,19 @@ class InputController: IMKInputController {
 
         menu.addItem(NSMenuItem.separator())
 
-        let editKeymapItem = NSMenuItem(title: "Edit Keymap…",
+        let editKeymapItem = NSMenuItem(title: MenuStrings.t(.editKeymap),
                                         action: #selector(editKeymap),
                                         keyEquivalent: "")
         editKeymapItem.target = self
         menu.addItem(editKeymapItem)
 
-        let reloadKeymapItem = NSMenuItem(title: "Reload Keymap",
+        let reloadKeymapItem = NSMenuItem(title: MenuStrings.t(.reloadKeymap),
                                           action: #selector(reloadKeymap),
                                           keyEquivalent: "")
         reloadKeymapItem.target = self
         menu.addItem(reloadKeymapItem)
 
-        let resetKeymapItem = NSMenuItem(title: "Reset Keymap to Defaults",
+        let resetKeymapItem = NSMenuItem(title: MenuStrings.t(.resetKeymap),
                                          action: #selector(resetKeymap),
                                          keyEquivalent: "")
         resetKeymapItem.target = self
@@ -739,7 +739,7 @@ class InputController: IMKInputController {
         editLearnedItem.target = self
         menu.addItem(editLearnedItem)
 
-        let reloadLearnedItem = NSMenuItem(title: "Презареди научените думи",
+        let reloadLearnedItem = NSMenuItem(title: MenuStrings.t(.reloadLearned),
                                            action: #selector(reloadLearnedWordsAction),
                                            keyEquivalent: "")
         reloadLearnedItem.target = self
@@ -754,7 +754,7 @@ class InputController: IMKInputController {
         menu.addItem(NSMenuItem.separator())
 
         // Forced ("always Bulgarian") words — populated by ⌥⌘B.
-        let forceItem = NSMenuItem(title: MenuStrings.t(.forceToLanguage, detector.languageNames[LanguagePackStore.leadCode] ?? LanguagePackStore.leadCode),
+        let forceItem = NSMenuItem(title: MenuStrings.t(.forceToLanguage, detector.languageName(for: LanguagePackStore.leadCode)),
                                    action: #selector(forceBulgarianFromMenu),
                                    keyEquivalent: "")
         forceItem.target = self
@@ -762,7 +762,7 @@ class InputController: IMKInputController {
         menu.addItem(forceItem)
 
         let clearForcedItem = NSMenuItem(
-            title: "Забрави наложените български думи (\(detector.forcedBgWordCount))",
+            title: MenuStrings.t(.forgetForcedWords, "\(detector.forcedBgWordCount)"),
             action: #selector(clearForcedBgWordsAction),
             keyEquivalent: "")
         clearForcedItem.target = self
@@ -960,7 +960,7 @@ class InputController: IMKInputController {
     @objc private func chooseLeadLanguage() {
         DebugLog.write("chooseLeadLanguage opened")
         let codes = detector.activeLanguages
-        let names = codes.map { detector.languageNames[$0] ?? $0 }
+        let names = codes.map { detector.languageName(for: $0) }
         guard let choice = askToChoose(title: MenuStrings.t(.leadLanguage),
                                        message: MenuStrings.t(.leadLanguagePrompt),
                                        options: names),
@@ -977,7 +977,7 @@ class InputController: IMKInputController {
     @objc private func chooseLanguageToRemove() {
         DebugLog.write("chooseLanguageToRemove opened")
         let codes = detector.activeLanguages.filter { $0 != LanguagePackStore.baseCode }
-        let names = codes.map { detector.languageNames[$0] ?? $0 }
+        let names = codes.map { detector.languageName(for: $0) }
         guard let choice = askToChoose(title: MenuStrings.t(.removeLanguageMenu),
                                        message: MenuStrings.t(.removeLanguagePrompt),
                                        options: names),

@@ -42,6 +42,11 @@ enum MenuStrings {
         case nothingToChoose
         case ok
         case cancel
+        case forgetForcedWords
+        case reloadLearned
+        case editKeymap
+        case reloadKeymap
+        case resetKeymap
     }
 
     /// Which language the menu is written in. Follows the lead language when
@@ -95,6 +100,11 @@ enum MenuStrings {
             .nothingToChoose:    "There is nothing to choose here.",
             .ok:                 "OK",
             .cancel:             "Cancel",
+            .forgetForcedWords:  "Forget the words I forced (%@)",
+            .reloadLearned:      "Reload learned words",
+            .editKeymap:         "Edit the keyboard map…",
+            .reloadKeymap:       "Reload the keyboard map",
+            .resetKeymap:        "Reset the keyboard map",
         ],
         "bg": [
             .defaultForUnknown: "По подразбиране за непознати думи:",
@@ -130,6 +140,11 @@ enum MenuStrings {
             .nothingToChoose:    "Няма какво да се избира тук.",
             .ok:                 "Добре",
             .cancel:             "Отказ",
+            .forgetForcedWords:  "Забрави наложените думи (%@)",
+            .reloadLearned:      "Презареди научените думи",
+            .editKeymap:         "Редактирай клавишите…",
+            .reloadKeymap:       "Презареди клавишите",
+            .resetKeymap:        "Върни клавишите по подразбиране",
         ],
         "ru": [
             .defaultForUnknown: "По умолчанию для неизвестных слов:",
@@ -165,6 +180,11 @@ enum MenuStrings {
             .nothingToChoose:    "Здесь нечего выбирать.",
             .ok:                 "ОК",
             .cancel:             "Отмена",
+            .forgetForcedWords:  "Забыть навязанные слова (%@)",
+            .reloadLearned:      "Перезагрузить запомненные слова",
+            .editKeymap:         "Изменить раскладку…",
+            .reloadKeymap:       "Перезагрузить раскладку",
+            .resetKeymap:        "Сбросить раскладку",
         ],
     ]
 }
