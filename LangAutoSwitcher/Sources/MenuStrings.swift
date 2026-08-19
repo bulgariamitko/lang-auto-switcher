@@ -49,6 +49,7 @@ enum MenuStrings {
         case resetKeymap
         case showKeyboard
         case showKeyboardPrompt
+        case aboutPage
     }
 
     /// Which language the menu is written in. Follows the lead language when
@@ -109,6 +110,7 @@ enum MenuStrings {
             .resetKeymap:        "Reset the keyboard map",
             .showKeyboard:       "Show the keyboard",
             .showKeyboardPrompt: "Top row: the key you press. Below it: the letter you get.",
+            .aboutPage:          "About LangAutoSwitcher…",
         ],
         "bg": [
             .defaultForUnknown: "По подразбиране за непознати думи:",
@@ -151,6 +153,7 @@ enum MenuStrings {
             .resetKeymap:        "Върни клавишите по подразбиране",
             .showKeyboard:       "Покажи клавиатурата",
             .showKeyboardPrompt: "Горният ред е клавишът, който натискаш. Под него е буквата, която излиза.",
+            .aboutPage:          "За LangAutoSwitcher…",
         ],
         "ru": [
             .defaultForUnknown: "По умолчанию для неизвестных слов:",
@@ -193,6 +196,7 @@ enum MenuStrings {
             .resetKeymap:        "Сбросить раскладку",
             .showKeyboard:       "Показать клавиатуру",
             .showKeyboardPrompt: "Верхний ряд — клавиша, которую вы нажимаете. Под ней — буква, которая получается.",
+            .aboutPage:          "О LangAutoSwitcher…",
         ],
     ]
 }

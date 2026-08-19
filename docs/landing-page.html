@@ -1,0 +1,466 @@
+<title>LangAutoSwitcher</title>
+
+<style>
+  /* Apple's own palette and rhythm. The typeface is SF Pro itself, reached
+     through -apple-system — the audience is on Macs, so the real face is
+     available and its Cyrillic is excellent. No webfont, no substitute. */
+  :root {
+    --bg:         #ffffff;
+    --bg-alt:     #f5f5f7;
+    --text:       #1d1d1f;
+    --text-2:     #6e6e73;
+    --accent:     #0071e3;
+    --accent-ink: #0071e3;
+    --rule:       #d2d2d7;
+    --card:       #ffffff;
+    --code-bg:    #f5f5f7;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg:         #000000;
+      --bg-alt:     #101010;
+      --text:       #f5f5f7;
+      --text-2:     #86868b;
+      --accent:     #2997ff;
+      --accent-ink: #2997ff;
+      --rule:       #2a2a2c;
+      --card:       #1d1d1f;
+      --code-bg:    #1d1d1f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:         #000000;
+    --bg-alt:     #101010;
+    --text:       #f5f5f7;
+    --text-2:     #86868b;
+    --accent:     #2997ff;
+    --accent-ink: #2997ff;
+    --rule:       #2a2a2c;
+    --card:       #1d1d1f;
+    --code-bg:    #1d1d1f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+                 "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.5;
+    letter-spacing: -.01em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 22px; }
+  .narrow { max-width: 700px; margin-left: auto; margin-right: auto; }
+
+  section { padding: 100px 0; }
+  section.alt { background: var(--bg-alt); }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 600; }
+  h1 {
+    font-size: clamp(40px, 7vw, 76px);
+    line-height: 1.05;
+    letter-spacing: -.022em;
+  }
+  h2 {
+    font-size: clamp(30px, 4.4vw, 46px);
+    line-height: 1.1;
+    letter-spacing: -.019em;
+  }
+  h3 { font-size: 21px; line-height: 1.25; letter-spacing: -.014em; }
+
+  p { margin: 0; }
+  .lede {
+    font-size: clamp(19px, 2.3vw, 25px);
+    line-height: 1.4;
+    letter-spacing: -.012em;
+    color: var(--text-2);
+  }
+  .sub { color: var(--text-2); }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, .btn:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 6px;
+  }
+
+  .center { text-align: center; }
+  .stack { display: flex; flex-direction: column; gap: 22px; }
+  .stack-sm { display: flex; flex-direction: column; gap: 12px; }
+
+  .btn {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: -.01em;
+    padding: 12px 24px;
+    border-radius: 980px;
+    text-decoration: none;
+  }
+  .btn:hover { filter: brightness(1.08); text-decoration: none; }
+  .btn-row { display: flex; gap: 26px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .btn-link { font-size: 17px; }
+  .btn-link::after { content: " ›"; }
+
+  .fineprint { font-size: 14px; color: var(--text-2); letter-spacing: 0; }
+
+  /* ── the demo: the product's whole thesis, shown once ─────────── */
+  .demo {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 32px;
+    box-shadow: 0 4px 30px rgba(0,0,0,.08);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: clamp(13px, 2.4vw, 17px);
+    line-height: 2.1;
+    text-align: left;
+    overflow-x: auto;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) { .demo { box-shadow: none; border: 1px solid var(--rule); } }
+  }
+  :root[data-theme="dark"] .demo { box-shadow: none; border: 1px solid var(--rule); }
+
+  .demo-row { display: flex; gap: 16px; align-items: baseline; white-space: nowrap; }
+  .demo-label {
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    min-width: 86px;
+    font-family: -apple-system, sans-serif;
+  }
+  .lat { color: var(--text-2); }
+  .cyr { color: var(--accent-ink); font-weight: 600; }
+  .caret {
+    display: inline-block;
+    width: .55ch;
+    background: var(--accent);
+    color: transparent;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0 } }
+
+  /* ── content ──────────────────────────────────────────────────── */
+  ul.plain { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; color: var(--text-2); }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 34px; counter-reset: s; }
+  .steps > li { display: grid; grid-template-columns: 34px 1fr; gap: 18px; align-items: start; }
+  .steps > li::before {
+    counter-increment: s;
+    content: counter(s);
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .steps h3 { margin-bottom: 4px; }
+  .steps p { color: var(--text-2); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  section.alt .card { background: var(--bg); }
+  .card p { color: var(--text-2); font-size: 16px; }
+
+  .scroller { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 16px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--rule); }
+  th { font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-2); font-weight: 500; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  .keymap { font-variant-numeric: tabular-nums; }
+  .keymap td { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .keymap td:nth-child(odd) { color: var(--text-2); }
+  .keymap td:nth-child(even) { color: var(--accent-ink); font-weight: 600; }
+
+  kbd {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .88em;
+    background: var(--code-bg);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 1px 6px;
+    color: var(--text);
+  }
+  section.alt kbd { background: var(--bg); }
+
+  code.inline {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .88em;
+    background: var(--code-bg);
+    border-radius: 5px;
+    padding: 2px 6px;
+  }
+  section.alt code.inline { background: var(--bg); }
+
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border-radius: 12px;
+    padding: 18px;
+    overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 14px;
+    color: var(--text);
+  }
+  section.alt pre { background: var(--bg); }
+
+  footer { padding: 44px 0 64px; border-top: 1px solid var(--rule); }
+  footer .wrap { display: flex; flex-direction: column; gap: 10px; }
+  footer p { font-size: 14px; color: var(--text-2); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .caret { animation: none }
+    * { transition: none !important }
+  }
+</style>
+
+<section style="padding-bottom:80px">
+  <div class="wrap center stack">
+    <h1>Пиши на два езика.<br>Забрави за превключването.</h1>
+    <p class="lede narrow">
+      LangAutoSwitcher разпознава на кой език пишеш — дума по дума — и сам сменя
+      азбуката. Без <kbd>⌘Space</kbd>, без сгрешени пароли, без съобщения, които
+      започват на кирилица и свършват на латиница.
+    </p>
+    <div class="btn-row">
+      <a class="btn" href="https://github.com/bulgariamitko/lang-auto-switcher/releases/latest">Изтегли за macOS</a>
+      <a class="btn-link" href="https://github.com/bulgariamitko/lang-auto-switcher">Виж кода</a>
+    </div>
+    <p class="fineprint">
+      Версия 2.8.5 · macOS 14 Sonoma или по-нов · Apple Silicon и Intel ·
+      подписано и нотаризирано от Apple · безплатно
+    </p>
+
+    <div class="demo narrow" style="margin-top:26px" aria-label="Пример как изглежда писането">
+      <div class="demo-row">
+        <span class="demo-label">пишеш</span>
+        <span class="lat" id="typed">napisah now kod and sent email to John</span><span class="caret" id="caret">&nbsp;</span>
+      </div>
+      <div class="demo-row">
+        <span class="demo-label">получаваш</span>
+        <span id="out"><span class="cyr">написах нов код</span> <span class="lat">and sent email to John</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap stack">
+    <h2 class="center">За всеки, който пише<br>на български и английски</h2>
+    <div class="narrow stack" style="margin-top:10px">
+      <ul class="plain">
+        <li>Забравяш да превключиш клавиатурата преди да напишеш парола</li>
+        <li>Съобщенията ти започват на единия език и свършват на другия</li>
+        <li>Натискаш <kbd>⌘Space</kbd> по средата на изречението</li>
+        <li>При БДС и фонетичната подредба трябва да <em>мислиш</em> в кой режим си</li>
+      </ul>
+      <p class="sub">
+        Кирилската и английската ти клавиатура си остават както са. Това е просто
+        още един източник на въвеждане, който избираш от 🌐 иконата горе вдясно.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap stack">
+    <h2 class="center">Речник решава, не режим</h2>
+    <ol class="steps narrow" style="margin-top:20px">
+      <li>
+        <div>
+          <h3>Пишеш нормално</h3>
+          <p>На обикновена QWERTY клавиатура. Буквите се подчертават, докато се изписва думата.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Натискаш интервал</h3>
+          <p>В този момент думата се проверява срещу два речника — по 234 000 думи всеки, английски и български.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Печелившият език остава</h3>
+          <p>Думата или си остава на латиница, или се превръща в кирилица. Ако съществува и на двата езика, следва езика на съседните думи — така потокът на изречението се запазва.</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="scroller narrow" style="margin-top:30px">
+      <table>
+        <thead><tr><th>Пишеш</th><th>Виждаш</th></tr></thead>
+        <tbody>
+          <tr><td class="mono lat">towa e samo proba</td><td class="cyr">това е само проба</td></tr>
+          <tr><td class="mono lat">hello how are you</td><td class="lat">hello how are you</td></tr>
+          <tr><td class="mono lat">napisah now kod and want to write</td><td><span class="cyr">написах нов код</span> <span class="lat">and want to write</span></td></tr>
+          <tr><td class="mono lat">john@gmail.com</td><td class="lat">john@gmail.com</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap stack">
+    <h2 class="center">Около минута, без Terminal</h2>
+    <ol class="steps narrow" style="margin-top:20px">
+      <li>
+        <div>
+          <h3>Изтегли DMG-то</h3>
+          <p><a href="https://github.com/bulgariamitko/lang-auto-switcher/releases/latest">Последната версия от GitHub</a>. Отвори го и щракни двукратно върху <strong>Install LangAutoSwitcher</strong> — диалог на български те води през стъпките.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Излез от профила си и влез отново</h3>
+          <p>macOS открива нови методи за въвеждане само при влизане. Няма как да се заобиколи.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Добави го като източник на въвеждане</h3>
+          <p>Системни настройки → Клавиатура → Източници на въвеждане → <strong>Edit…</strong> → <strong>+</strong> → потърси „LangAutoSwitcher“ → <strong>Add</strong>.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Превключи към него и пиши</h3>
+          <p>От 🌐 иконата в горната лента. Следващите обновления идват сами — ръчна инсталация е нужна само този първи път.</p>
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap stack">
+    <h2 class="center">Един клавиш — една буква</h2>
+    <p class="lede narrow center" style="font-size:19px">
+      Без диграфи за запомняне. Почти никога няма да ти трябва тази таблица —
+      повечето думи се разпознават точно както естествено би ги написал:
+      <code class="inline">zdravei</code>, <code class="inline">blagodarq</code>,
+      <code class="inline">dobre</code>.
+    </p>
+    <div class="scroller narrow" style="margin-top:16px">
+      <table class="keymap">
+        <tbody>
+          <tr><td>a</td><td>а</td><td>i</td><td>и</td><td>q</td><td>я</td><td>y</td><td>ъ</td></tr>
+          <tr><td>b</td><td>б</td><td>j</td><td>й</td><td>r</td><td>р</td><td>z</td><td>з</td></tr>
+          <tr><td>c</td><td>ц</td><td>k</td><td>к</td><td>s</td><td>с</td><td>[</td><td>ш</td></tr>
+          <tr><td>d</td><td>д</td><td>l</td><td>л</td><td>t</td><td>т</td><td>]</td><td>щ</td></tr>
+          <tr><td>e</td><td>е</td><td>m</td><td>м</td><td>u</td><td>у</td><td>;</td><td>ж</td></tr>
+          <tr><td>f</td><td>ф</td><td>n</td><td>н</td><td>v</td><td>ж</td><td>`</td><td>ч</td></tr>
+          <tr><td>g</td><td>г</td><td>o</td><td>о</td><td>w</td><td>в</td><td>\</td><td>ю</td></tr>
+          <tr><td>h</td><td>х</td><td>p</td><td>п</td><td>x</td><td>ь</td><td>§</td><td>ч</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sub narrow center" style="margin-top:16px; font-size:16px">
+      Не ти харесва? Менюто отваря <code class="inline">keymap.json</code> —
+      смени която двойка искаш и избери „Презареди клавишите“.
+    </p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap stack">
+    <h2 class="center">Когато сгреши</h2>
+    <div class="cards" style="margin-top:20px">
+      <div class="card">
+        <h3><kbd>⌥⌘Z</kbd></h3>
+        <p>Превърнало е дума, която е трябвало да остане на латиница? Един клавиш я връща — и приложението я запомня, за да не го прави пак.</p>
+      </div>
+      <div class="card">
+        <h3><kbd>⌥⌘B</kbd></h3>
+        <p>Обратното: дума, която липсва в речника, но искаш винаги да се превръща. Натискаш веднъж и вече го знае.</p>
+      </div>
+      <div class="card">
+        <h3>Изключване за приложение</h3>
+        <p>Някои полета за търсене не се разбират с методите за въвеждане. Изключваш го само за тях, от менюто.</p>
+      </div>
+      <div class="card">
+        <h3>Поправка на печатни грешки</h3>
+        <p>Разпознава разменени и съседни клавиши — но само когато е сигурно. По-добре да остави думата, отколкото да я подмени с друга.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap stack narrow">
+    <h2 class="center">Нищо не излиза от твоя Mac</h2>
+    <p class="sub" style="margin-top:8px">
+      Речниците са вградени в приложението. То <strong>не</strong> праща текст
+      никъде, <strong>не</strong> събира статистика и <strong>не</strong> записва
+      натиснатите клавиши на диска.
+    </p>
+    <p class="sub">
+      Единствената мрежова заявка е проверката за нова версия през
+      <a href="https://sparkle-project.org">Sparkle</a> — можеш да я изключиш.
+      Целият код е отворен, ако искаш да провериш сам.
+    </p>
+    <pre>rm -rf ~/Library/Input\ Methods/LangAutoSwitcher.app</pre>
+    <p class="fineprint">Деинсталиране — това е всичко. После излез и влез отново.</p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap stack narrow center">
+    <h2>Ядрото е готово<br>за Linux и Windows</h2>
+    <p class="sub" style="margin-top:8px">
+      Фонетичното съпоставяне, речниците, разпознаването на език и автокорекцията
+      живеят в общ пакет на Rust. За нова операционна система остава само тънкият
+      адаптер към нейния метод за въвеждане — скиците за IBus и TSF вече са в
+      хранилището. Помощ е добре дошла.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Създадено от <a href="https://github.com/bulgariamitko">Димитър Клатуров</a> — разработчик от България.</p>
+    <p><a href="https://github.com/bulgariamitko/lang-auto-switcher">Кодът е в GitHub</a> · MIT лиценз · безплатно, завинаги</p>
+  </div>
+</footer>
+
+<script>
+  // The demo types the Latin, then resolves it to Cyrillic — the product's
+  // whole thesis, shown once rather than described.
+  (function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var typed = document.getElementById("typed");
+    var out = document.getElementById("out");
+    var full = "napisah now kod and sent email to John";
+    var resolved = '<span class="cyr">написах нов код</span> <span class="lat">and sent email to John</span>';
+    typed.textContent = "";
+    out.innerHTML = "";
+    var i = 0;
+    function step() {
+      if (i <= full.length) {
+        typed.textContent = full.slice(0, i);
+        i++;
+        setTimeout(step, 52);
+      } else {
+        setTimeout(function () { out.innerHTML = resolved; }, 320);
+      }
+    }
+    setTimeout(step, 450);
+  })();
+</script>

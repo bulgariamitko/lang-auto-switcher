@@ -776,6 +776,11 @@ class InputController: IMKInputController {
 
         menu.addItem(NSMenuItem.separator())
 
+        let aboutItem = NSMenuItem(title: MenuStrings.t(.aboutPage),
+                                   action: #selector(openAboutPage), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+
         let diagnosticsItem = NSMenuItem(title: MenuStrings.t(.diagnostics),
                                          action: #selector(showDiagnostics),
                                          keyEquivalent: "")
@@ -968,6 +973,16 @@ class InputController: IMKInputController {
     /// source, which while we are active is plain ABC. Asking which language
     /// first was a needless step — there are only ever a handful enabled, and
     /// seeing them together is what makes the differences obvious.
+    /// The page explaining what this app is, how to install it and how to use
+    /// it — the thing to send someone who asks "what is that icon".
+    private static let aboutPageURL =
+        URL(string: "https://claude.ai/code/artifact/d7b7425a-756f-467d-84b9-234c4ec2e717")!
+
+    @objc private func openAboutPage() {
+        DebugLog.write("openAboutPage")
+        NSWorkspace.shared.open(Self.aboutPageURL)
+    }
+
     @objc private func showKeyboardChart() {
         DebugLog.write("showKeyboardChart opened")
         let codes = detector.activeLanguages
