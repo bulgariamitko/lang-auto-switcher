@@ -16,6 +16,10 @@ import re
 import sys
 import unicodedata
 
+# Short words are only trusted when they are common; see the filter below.
+SHORT_LEN = 3
+SHORT_MAX_RANK = 20_000
+
 SCRIPTS = {
     "cyrillic": lambda c: "CYRILLIC" in unicodedata.name(c, ""),
     "latin":    lambda c: "LATIN" in unicodedata.name(c, ""),
@@ -26,15 +30,29 @@ SCRIPTS = {
 def build(src_path, out_path, script):
     in_script = SCRIPTS[script]
     seen = set()
-    kept = dropped = 0
+    kept = dropped = short_dropped = 0
     with open(src_path, encoding="utf-8", errors="ignore") as fh:
-        for line in fh:
+        for rank, line in enumerate(fh):
             word = line.strip().lower()
             if not word:
                 continue
             # One token only, no digits, no punctuation, nothing from another
-            # alphabet. Length 2..30 drops single letters and OCR runs.
-            if not (2 <= len(word) <= 30) or not all(in_script(c) for c in word):
+            # alphabet. Single letters are kept — "и", "в", "с" are real words
+            # — because the frequency rule below is what actually separates
+            # them from debris.
+            if not (1 <= len(word) <= 30) or not all(in_script(c) for c in word):
+                dropped += 1
+                continue
+            # A short word must also be COMMON. The source is frequency
+            # ordered, and short entries in its tail are overwhelmingly OCR
+            # debris: real Russian short words ("и", "в", "на", "не") all rank
+            # inside the first few thousand, while 7,000 more sit past rank
+            # 50,000 ("фху", "кд", "уц"). Those matter far more than their
+            # number suggests, because short words are what collide between
+            # languages — "ше" at rank 122,399 was enough to turn the English
+            # "we" into Russian.
+            if len(word) <= SHORT_LEN and rank > SHORT_MAX_RANK:
+                short_dropped += 1
                 dropped += 1
                 continue
             if word in seen:
@@ -45,7 +63,8 @@ def build(src_path, out_path, script):
         for word in sorted(seen):
             out.write(word + "\n")
     total = kept + dropped
-    print(f"{out_path}: kept {kept:,} of {total:,} ({100*kept/total:.0f}%), dropped {dropped:,}")
+    print(f"{out_path}: kept {kept:,} of {total:,} ({100*kept/total:.0f}%), "
+          f"dropped {dropped:,} ({short_dropped:,} of them rare short words)")
 
 
 if __name__ == "__main__":
