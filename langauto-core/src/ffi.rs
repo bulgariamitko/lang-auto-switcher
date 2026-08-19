@@ -134,6 +134,119 @@ pub unsafe extern "C" fn langauto_detector_new(
     Box::into_raw(Box::new(LangAutoDetector { inner: detector }))
 }
 
+/// Create a detector with NO languages yet. Add them with
+/// `langauto_detector_add_pack`, base language first. This is how the macOS
+/// shim builds a detector from the input sources the user already enabled,
+/// rather than from a hardcoded pair.
+#[no_mangle]
+pub extern "C" fn langauto_detector_new_empty() -> *mut LangAutoDetector {
+    let detector = LanguageDetector::with_packs(Vec::new());
+    Box::into_raw(Box::new(LangAutoDetector { inner: detector }))
+}
+
+/// Append a language. `keys` and `letters` are parallel arrays of `n` Unicode
+/// scalars describing the keyboard layout: pressing `keys[i]` produces
+/// `letters[i]`. `confuse_a`/`confuse_b` are parallel arrays of `n_confuse`
+/// scalars naming letter pairs users mix up. Pass an empty keymap and
+/// `is_latin_base = 1` for a language written in the Latin alphabet.
+///
+/// Returns the new pack's index, or -1 on invalid input.
+///
+/// # Safety
+/// All pointers must be valid for their stated lengths; the string arguments
+/// must be null-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_add_pack(
+    d: *mut LangAutoDetector,
+    id: *const c_char,
+    display_name: *const c_char,
+    dict_text: *const c_char,
+    keys: *const u32,
+    letters: *const u32,
+    n: usize,
+    vowels: *const c_char,
+    confuse_a: *const u32,
+    confuse_b: *const u32,
+    n_confuse: usize,
+    is_latin_base: c_int,
+) -> c_int {
+    if d.is_null() {
+        return -1;
+    }
+    let (Some(id), Some(name), Some(dict)) = (
+        c_to_rust_str(id),
+        c_to_rust_str(display_name),
+        c_to_rust_str(dict_text),
+    ) else {
+        return -1;
+    };
+    let vowels = c_to_rust_str(vowels).unwrap_or("");
+
+    let mut keymap: Vec<(char, char)> = Vec::with_capacity(n);
+    if !keys.is_null() && !letters.is_null() {
+        for i in 0..n {
+            if let (Some(k), Some(l)) = (
+                char::from_u32(*keys.add(i)),
+                char::from_u32(*letters.add(i)),
+            ) {
+                keymap.push((k, l));
+            }
+        }
+    }
+    let mut confusables: Vec<(char, char)> = Vec::with_capacity(n_confuse);
+    if !confuse_a.is_null() && !confuse_b.is_null() {
+        for i in 0..n_confuse {
+            if let (Some(a), Some(b)) = (
+                char::from_u32(*confuse_a.add(i)),
+                char::from_u32(*confuse_b.add(i)),
+            ) {
+                confusables.push((a, b));
+            }
+        }
+    }
+
+    let dict = parse_dict(dict);
+    let pack = if is_latin_base != 0 {
+        crate::lang::LanguagePack::latin(id, name, dict, &keymap)
+    } else {
+        crate::lang::LanguagePack::transliterated(id, name, dict, &keymap, vowels, &confusables)
+    };
+    let packs = &mut (*d).inner.packs;
+    packs.push(pack);
+    (packs.len() - 1) as c_int
+}
+
+/// How many languages are enabled.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_pack_count(d: *mut LangAutoDetector) -> usize {
+    if d.is_null() {
+        return 0;
+    }
+    (*d).inner.packs.len()
+}
+
+/// The short id of language `index` (caller frees), or null if out of range.
+///
+/// # Safety
+/// `d` must be a valid detector pointer.
+#[no_mangle]
+pub unsafe extern "C" fn langauto_detector_pack_id(
+    d: *mut LangAutoDetector,
+    index: usize,
+) -> *mut c_char {
+    if d.is_null() {
+        return ptr::null_mut();
+    }
+    let packs = &(*d).inner.packs;
+    match packs.get(index) {
+        Some(p) => rust_to_c_string(&p.id),
+        None => ptr::null_mut(),
+    }
+}
+
 /// Free a detector. Safe to call with null.
 ///
 /// # Safety
@@ -147,23 +260,26 @@ pub unsafe extern "C" fn langauto_detector_free(d: *mut LangAutoDetector) {
 
 // ---------- language enum mirror ----------
 
+// Language is now an INDEX into the detector's pack list, so the ABI is no
+// longer limited to two. Index 0 is always the Latin base (English) and 1 is
+// the first added language, which keeps the old constants valid. "Uncertain"
+// moved to -1 because 2 now means "the third language".
 pub const LANGAUTO_LANG_ENGLISH: c_int = 0;
 pub const LANGAUTO_LANG_BULGARIAN: c_int = 1;
-pub const LANGAUTO_LANG_UNCERTAIN: c_int = 2;
+pub const LANGAUTO_LANG_UNCERTAIN: c_int = -1;
 
 fn lang_to_int(l: DetectedLanguage) -> c_int {
-    match l {
-        DetectedLanguage::English => LANGAUTO_LANG_ENGLISH,
-        DetectedLanguage::Bulgarian => LANGAUTO_LANG_BULGARIAN,
-        DetectedLanguage::Uncertain => LANGAUTO_LANG_UNCERTAIN,
+    match l.index() {
+        Some(i) => i as c_int,
+        None => LANGAUTO_LANG_UNCERTAIN,
     }
 }
 
 fn int_to_lang(i: c_int) -> DetectedLanguage {
-    match i {
-        LANGAUTO_LANG_BULGARIAN => DetectedLanguage::Bulgarian,
-        LANGAUTO_LANG_UNCERTAIN => DetectedLanguage::Uncertain,
-        _ => DetectedLanguage::English,
+    if i < 0 {
+        DetectedLanguage::Uncertain
+    } else {
+        DetectedLanguage::Lang(i as usize)
     }
 }
 
@@ -296,7 +412,8 @@ pub unsafe extern "C" fn langauto_detector_word_in_en_dict(
         return 0;
     }
     let Some(w) = c_to_rust_str(word) else { return 0 };
-    if (*d).inner.en_dict.contains(&w.to_lowercase()) { 1 } else { 0 }
+    let packs = &(*d).inner.packs;
+    if packs.first().map_or(false, |p| p.contains(w)) { 1 } else { 0 }
 }
 
 /// 1 if `cyrillic_word` (lowercase) is in the Bulgarian dictionary.
@@ -312,7 +429,8 @@ pub unsafe extern "C" fn langauto_detector_word_in_bg_dict(
         return 0;
     }
     let Some(w) = c_to_rust_str(cyrillic_word) else { return 0 };
-    if (*d).inner.bg_dict.contains(&w.to_lowercase()) { 1 } else { 0 }
+    let packs = &(*d).inner.packs;
+    if packs.get(1).map_or(false, |p| p.contains(w)) { 1 } else { 0 }
 }
 
 /// Set the default language preference (used to break ties).
@@ -419,7 +537,11 @@ pub unsafe extern "C" fn langauto_detector_dict_counts(
     let (en, bg) = if d.is_null() {
         (0, 0)
     } else {
-        ((*d).inner.en_dict.len(), (*d).inner.bg_dict.len())
+        let packs = &(*d).inner.packs;
+        (
+            packs.first().map_or(0, |p| p.dict.len()),
+            packs.get(1).map_or(0, |p| p.dict.len()),
+        )
     };
     if !out_en.is_null() {
         *out_en = en;

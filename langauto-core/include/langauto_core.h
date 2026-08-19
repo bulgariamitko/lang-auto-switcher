@@ -13,9 +13,13 @@ extern "C" {
 #endif
 
 // ---------- language enum ----------
+// Language is an INDEX into the detector's enabled-language list, so this is
+// no longer limited to two. 0 is always the Latin base (English) and 1 the
+// first added language, which keeps these two names accurate. UNCERTAIN moved
+// to -1 because 2 now means "the third language".
 #define LANGAUTO_LANG_ENGLISH   0
 #define LANGAUTO_LANG_BULGARIAN 1
-#define LANGAUTO_LANG_UNCERTAIN 2
+#define LANGAUTO_LANG_UNCERTAIN (-1)
 
 // ---------- opaque detector handle ----------
 typedef struct LangAutoDetector LangAutoDetector;
@@ -50,6 +54,29 @@ void langauto_clear_char_overrides(void);
 // Returns NULL on invalid input.
 LangAutoDetector* langauto_detector_new(const char* en_dict_text,
                                         const char* bg_dict_text);
+
+// Build a detector from any number of languages instead of a fixed pair.
+// Create it empty, then append languages base-first. `keys`/`letters` are
+// parallel arrays of `n` Unicode scalars: pressing keys[i] types letters[i].
+// `confuse_a`/`confuse_b` name letter pairs users mix up. Pass an empty keymap
+// with is_latin_base=1 for a language written in the Latin alphabet.
+// Returns the new language's index, or -1 on invalid input.
+LangAutoDetector* langauto_detector_new_empty(void);
+int    langauto_detector_add_pack(LangAutoDetector* d,
+                                  const char* id,
+                                  const char* display_name,
+                                  const char* dict_text,
+                                  const uint32_t* keys,
+                                  const uint32_t* letters,
+                                  size_t n,
+                                  const char* vowels,
+                                  const uint32_t* confuse_a,
+                                  const uint32_t* confuse_b,
+                                  size_t n_confuse,
+                                  int is_latin_base);
+size_t langauto_detector_pack_count(LangAutoDetector* d);
+char*  langauto_detector_pack_id(LangAutoDetector* d, size_t index);
+
 void langauto_detector_free(LangAutoDetector* d);
 
 // ---------- detector operations ----------

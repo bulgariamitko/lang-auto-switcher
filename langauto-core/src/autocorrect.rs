@@ -6,6 +6,8 @@
 
 use std::collections::HashSet;
 
+use crate::lang::LanguagePack;
+
 use crate::phonetic::latin_key_for_cyrillic;
 
 /// Optional spell-check hook. Platform shim sets it; returns the suggested
@@ -203,89 +205,64 @@ pub fn keys_adjacent(a: char, b: char) -> bool {
 ///   5. insertion (one key missed)
 /// With a fully inflected dictionary a typo often has several distance-1
 /// neighbors ("изтриеп" → изтрием/изтриеш/изтрие); ranking picks the right one.
-/// Bulgarian vowels. Inflection works by changing the FINAL vowel
-/// (кола/коли, разплатил/разплатила), so a final-vowel swap is a different
-/// grammatical form of the same word — never a typing slip.
-fn is_bg_vowel(c: char) -> bool {
-    matches!(c, 'а' | 'е' | 'и' | 'о' | 'у' | 'ъ' | 'ю' | 'я' | 'ь')
+/// Are these two letters typed on neighbouring keys of the given language?
+pub fn keys_adjacent_in(pack: &LanguagePack, a: char, b: char) -> bool {
+    match (pack.key_for(a), pack.key_for(b)) {
+        (Some(ka), Some(kb)) => qwerty_neighbors(ka).contains(kb),
+        _ => false,
+    }
 }
 
-/// Letters confused because of the transliteration convention rather than key
-/// distance, derived from the layout itself. Three keys produce a different
-/// letter than standard romanization would lead you to expect:
+/// Best single-edit repair for a word no language recognised, or None to
+/// leave it exactly as typed.
 ///
-///   key 'v' types ж, but people reach for it meaning в  ("видеа" → "жидеа")
-///   key 'y' types ъ, but people reach for it meaning й  ("трейлъри" → "треълъри")
-///   key 'x' types ь, but people reach for it meaning х
+/// Every edit is a silent guess about what the user MEANT, so the bar is
+/// deliberately high: a wrong guess rewrites a correctly-typed word into a
+/// different real word and the user may never notice. Declining to fix is the
+/// cheap failure — the word stays as typed, which is obvious on screen.
 ///
-/// Both parenthesised cases are real reports. Key-distance cannot model any of
-/// this — none of these pairs are neighbours — which is why blanket
-/// "substitute any letter" used to be doing this job, at the cost of rewriting
-/// far more correct words than it ever repaired. Listing the three known
-/// mismatches keeps the repair and drops the damage.
-fn layout_confusable(a: char, b: char) -> bool {
-    matches!(
-        (a, b),
-        ('ж', 'в') | ('в', 'ж') | ('ъ', 'й') | ('й', 'ъ') | ('ь', 'х') | ('х', 'ь')
-    )
-}
-
-/// Best single-edit repair for a word in NEITHER dictionary, or None to leave
-/// it exactly as typed.
+/// Dictionaries are never complete (ours was missing every л-participle of
+/// "разплатя"), so words reaching this function are frequently CORRECT rather
+/// than mistyped. Measured against the shipped Bulgarian dictionary, the old
+/// rules rewrote 77% of correct-but-missing words into some other word; these
+/// cut that to 14% while still fixing every real typo on record. Removed:
 ///
-/// Every edit here is a guess about what the user MEANT, applied silently, so
-/// the bar is deliberately high: a wrong guess rewrites a correctly-typed word
-/// into a different real word and the user may never notice. Declining to fix
-/// is the cheap failure — the word simply stays Latin, which is obvious on
-/// screen and easy to retype.
-///
-/// The dictionary is large but not complete (it was missing every л-participle
-/// of "разплатя", for one), so words that reach this function are frequently
-/// CORRECT rather than mistyped. Measured against the shipped dictionary, the
-/// old rules rewrote 77% of correct-but-missing words into some other word;
-/// these rules cut that to 14% while still fixing every real typo we have on
-/// record. What was removed, and why:
-///
-/// * Substitution between keys that are NOT neighbours. This was the single
-///   biggest source of damage (41% of all cases): in an inflected language
-///   almost every letter swap lands on another real word, and reaching a key
-///   far from the intended one is not a typing slip anyone actually makes.
-///   "разплатила" → "разклатила" (п/к, opposite ends of the keyboard) came
-///   from here.
-/// * Substituting the final vowel, even between neighbouring keys — that is
+/// * Substitution between keys that are NOT neighbours — the biggest source
+///   of damage (41% of cases): in an inflected language almost every letter
+///   swap lands on another real word, and reaching a far key is not a slip.
+/// * Substituting the final vowel, even between neighbours — that is
 ///   inflection, not typing.
-/// * Deleting an arbitrary letter. Now restricted to a doubled letter (a
-///   bounced key), the only deletion that is clearly mechanical.
-/// * Inserting a letter. Any of 30 letters at any position reaches a real word
+/// * Deleting an arbitrary letter (now only a doubled one — a bounced key).
+/// * Inserting a letter: 30 letters at any position reaches a real word far
 ///   too easily to trust.
-pub fn best_bulgarian_typo_fix(word: &str, dict: &HashSet<String>) -> Option<String> {
+pub fn best_typo_fix(word: &str, pack: &LanguagePack) -> Option<String> {
     let chars: Vec<char> = word.chars().collect();
     let len = chars.len();
     if len < 2 {
         return None;
     }
 
-    // Substitution, strongest evidence first: a neighbouring key beats a known
-    // transliteration confusion. Both refuse to touch a final vowel.
+    // Substitution, strongest evidence first: a neighbouring key beats a
+    // known layout confusion. Neither may touch a final vowel.
     let mut confusable_sub: Option<String> = None;
     for i in 0..len {
         let original = chars[i];
-        let final_vowel = i == len - 1 && is_bg_vowel(original);
-        for &replacement in CYRILLIC_LETTERS {
+        let final_vowel = i == len - 1 && pack.is_vowel(original);
+        for &replacement in &pack.letters {
             if replacement == original {
                 continue;
             }
-            if final_vowel && is_bg_vowel(replacement) {
+            if final_vowel && pack.is_vowel(replacement) {
                 continue;
             }
-            let adjacent = keys_adjacent(original, replacement);
-            if !adjacent && !layout_confusable(original, replacement) {
+            let adjacent = keys_adjacent_in(pack, original, replacement);
+            if !adjacent && !pack.is_confusable(original, replacement) {
                 continue;
             }
             let mut candidate = chars.clone();
             candidate[i] = replacement;
             let s: String = candidate.into_iter().collect();
-            if dict.contains(&s) {
+            if pack.dict.contains(&s) {
                 if adjacent {
                     return Some(s);
                 }
@@ -307,14 +284,14 @@ pub fn best_bulgarian_typo_fix(word: &str, dict: &HashSet<String>) -> Option<Str
         let mut candidate = chars.clone();
         candidate.swap(i, i + 1);
         let s: String = candidate.into_iter().collect();
-        if dict.contains(&s) {
+        if pack.dict.contains(&s) {
             return Some(s);
         }
     }
 
-    // Deletion, but only of a doubled letter: the key bounced and typed twice.
-    // Dropping an arbitrary letter turns "агора" into "гора" and "абсурдни"
-    // into "абсурди", which is word substitution, not typo repair.
+    // Deletion, but only of a doubled letter: the key bounced and typed
+    // twice. Dropping an arbitrary letter turns "агора" into "гора", which is
+    // word substitution rather than typo repair.
     for i in 0..len {
         let doubled = (i > 0 && chars[i] == chars[i - 1])
             || (i + 1 < len && chars[i] == chars[i + 1]);
@@ -324,7 +301,7 @@ pub fn best_bulgarian_typo_fix(word: &str, dict: &HashSet<String>) -> Option<Str
         let mut candidate = chars.clone();
         candidate.remove(i);
         let s: String = candidate.into_iter().collect();
-        if dict.contains(&s) {
+        if pack.dict.contains(&s) {
             return Some(s);
         }
     }
@@ -443,6 +420,12 @@ pub fn correct_bulgarian(
 mod tests {
     use super::*;
 
+    /// Wrap a word list in the real Bulgarian pack, so typo tests exercise
+    /// the actual alphabet, vowels, confusables and key positions.
+    fn bg_pack(words: &[&str]) -> crate::lang::LanguagePack {
+        crate::packs::bulgarian(build_dict(words))
+    }
+
     fn build_dict(words: &[&str]) -> HashSet<String> {
         words.iter().map(|w| w.to_string()).collect()
     }
@@ -533,11 +516,12 @@ mod tests {
     #[test]
     fn keys_adjacent_uses_qwerty_layout() {
         // п is typed 'p', ш is typed '[' — physically adjacent.
-        assert!(keys_adjacent('п', 'ш'));
+        let p = bg_pack(&[]);
+        assert!(keys_adjacent_in(&p, 'п', 'ш'));
         // п ('p') and м ('m') are far apart.
-        assert!(!keys_adjacent('п', 'м'));
+        assert!(!keys_adjacent_in(&p, 'п', 'м'));
         // в is typed 'w', е is typed 'e' — adjacent.
-        assert!(keys_adjacent('в', 'е'));
+        assert!(keys_adjacent_in(&p, 'в', 'е'));
     }
 
     #[test]
@@ -545,9 +529,9 @@ mod tests {
         // "изтриеп" has three distance-1 dictionary neighbors; only
         // п→ш is an adjacent-key substitution, so it must win over the
         // alphabetically earlier "изтрием" and the deletion "изтрие".
-        let dict = build_dict(&["изтрие", "изтрием", "изтриеш"]);
+        let pack = bg_pack(&["изтрие", "изтрием", "изтриеш"]);
         assert_eq!(
-            best_bulgarian_typo_fix("изтриеп", &dict),
+            best_typo_fix("изтриеп", &pack),
             Some("изтриеш".to_string())
         );
     }
@@ -555,24 +539,24 @@ mod tests {
     #[test]
     fn best_typo_fix_prefers_transposition_over_far_substitution() {
         // "нгео" → transposition gives "него"; no adjacent-key sub exists.
-        let dict = build_dict(&["него"]);
+        let pack = bg_pack(&["него"]);
         assert_eq!(
-            best_bulgarian_typo_fix("нгео", &dict),
+            best_typo_fix("нгео", &pack),
             Some("него".to_string())
         );
     }
 
     #[test]
     fn best_typo_fix_deletes_only_a_doubled_letter() {
-        let dict = build_dict(&["много"]);
+        let pack = bg_pack(&["много"]);
         // A bounced key typed the same letter twice → drop the duplicate.
-        assert_eq!(best_bulgarian_typo_fix("мнного", &dict), Some("много".to_string()));
+        assert_eq!(best_typo_fix("мнного", &pack), Some("много".to_string()));
         // A MISSED key is no longer repaired: inserting one of 30 letters at any
         // position lands on a real word far too easily to do silently. The word
         // stays as typed — visibly wrong on screen, and trivial to retype.
-        assert_eq!(best_bulgarian_typo_fix("мноо", &dict), None);
+        assert_eq!(best_typo_fix("мноо", &pack), None);
         // Nothing within one trusted edit → None.
-        assert_eq!(best_bulgarian_typo_fix("здравей", &dict), None);
+        assert_eq!(best_typo_fix("здравей", &pack), None);
     }
 
     #[test]
@@ -584,8 +568,8 @@ mod tests {
         //
         // п is typed 'p' and к is typed 'k': opposite ends of the keyboard.
         // Nobody hits 'k' reaching for 'p', so this was never a plausible typo.
-        let dict = build_dict(&["разклатила", "разклатил", "разклати"]);
-        assert_eq!(best_bulgarian_typo_fix("разплатила", &dict), None,
+        let pack = bg_pack(&["разклатила", "разклатил", "разклати"]);
+        assert_eq!(best_typo_fix("разплатила", &pack), None,
             "a correct word must not be rewritten into a different one");
     }
 
@@ -594,14 +578,14 @@ mod tests {
         // Bulgarian inflects by changing the final vowel, so "разплатила" vs
         // "разплатили" is a different grammatical form — not a typing slip —
         // even though и and а sit near each other.
-        let dict = build_dict(&["разплатили", "колата", "колите"]);
-        assert_eq!(best_bulgarian_typo_fix("разплатила", &dict), None);
-        assert_eq!(best_bulgarian_typo_fix("колата", &dict), None,
+        let pack = bg_pack(&["разплатили", "колата", "колите"]);
+        assert_eq!(best_typo_fix("разплатила", &pack), None);
+        assert_eq!(best_typo_fix("колата", &pack), None,
             "an exact dictionary word is not this function's business");
         // A final CONSONANT swap between neighbouring keys is still a typo and
         // must still be repaired — this is the "изтриеп" → "изтриеш" case.
-        let dict2 = build_dict(&["изтриеш"]);
-        assert_eq!(best_bulgarian_typo_fix("изтриеп", &dict2), Some("изтриеш".to_string()));
+        let pack2 = bg_pack(&["изтриеш"]);
+        assert_eq!(best_typo_fix("изтриеп", &pack2), Some("изтриеш".to_string()));
     }
 
     #[test]
@@ -609,9 +593,9 @@ mod tests {
         // Dropping any letter to reach a dictionary word turns "агора" into
         // "гора" and "абсурдни" into "абсурди" — substitution of one word for
         // another, not typo repair. Only a doubled letter may be dropped.
-        let dict = build_dict(&["гора", "абсурди"]);
-        assert_eq!(best_bulgarian_typo_fix("агора", &dict), None);
-        assert_eq!(best_bulgarian_typo_fix("абсурдни", &dict), None);
+        let pack = bg_pack(&["гора", "абсурди"]);
+        assert_eq!(best_typo_fix("агора", &pack), None);
+        assert_eq!(best_typo_fix("абсурдни", &pack), None);
     }
 
     #[test]
@@ -620,11 +604,11 @@ mod tests {
         // none of the pairs are keyboard neighbours — so they need the explicit
         // table rather than key distance.
         // 'v' types ж but was meant as в: "видеа" typed "videa" → "жидеа".
-        let dict = build_dict(&["видеа"]);
-        assert_eq!(best_bulgarian_typo_fix("жидеа", &dict), Some("видеа".to_string()));
+        let pack = bg_pack(&["видеа"]);
+        assert_eq!(best_typo_fix("жидеа", &pack), Some("видеа".to_string()));
         // 'y' types ъ but was meant as й: "трейлъри" typed "treylyri" → "треълъри".
-        let dict2 = build_dict(&["трейлъри"]);
-        assert_eq!(best_bulgarian_typo_fix("треълъри", &dict2), Some("трейлъри".to_string()));
+        let pack2 = bg_pack(&["трейлъри"]);
+        assert_eq!(best_typo_fix("треълъри", &pack2), Some("трейлъри".to_string()));
     }
 
     #[test]

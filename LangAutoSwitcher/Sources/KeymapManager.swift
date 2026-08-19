@@ -15,28 +15,9 @@ enum KeymapManager {
 
     /// The built-in default map mirrors `default_map_char` in
     /// `langauto-core/src/phonetic.rs`. Keep in sync.
-    static let defaults: [String: String] = [
-        // lowercase letters
-        "a": "а", "b": "б", "c": "ц", "d": "д", "e": "е",
-        "f": "ф", "g": "г", "h": "х", "i": "и", "j": "й",
-        "k": "к", "l": "л", "m": "м", "n": "н", "o": "о",
-        "p": "п", "r": "р", "s": "с", "t": "т",
-        "u": "у", "v": "ж", "w": "в", "x": "ь", "y": "ъ",
-        "z": "з", "q": "я",
-        // lowercase specials
-        "]": "щ", "[": "ш", ";": "ж", "'": "ь", "`": "ч", "\\": "ю",
-        // uppercase specials
-        "}": "Щ", "{": "Ш", ":": "Ж", "\"": "Ь", "~": "Ч", "|": "Ю",
-        // ISO Mac §/± key (top-left, left of 1) — alternate ч/Ч
-        "§": "ч", "±": "Ч",
-        // uppercase letters
-        "A": "А", "B": "Б", "C": "Ц", "D": "Д", "E": "Е",
-        "F": "Ф", "G": "Г", "H": "Х", "I": "И", "J": "Й",
-        "K": "К", "L": "Л", "M": "М", "N": "Н", "O": "О",
-        "P": "П", "R": "Р", "S": "С", "T": "Т",
-        "U": "У", "V": "Ж", "W": "В", "X": "Ь", "Y": "Ъ",
-        "Z": "З", "Q": "Я",
-    ]
+    /// The built-in default map. Defined once in ShippedKeymaps so the map the
+    /// app ships and the map it types with cannot drift apart.
+    static let defaults: [String: String] = ShippedKeymaps.bulgarian
 
     static var fileURL: URL {
         let appSupport = FileManager.default
@@ -44,6 +25,16 @@ enum KeymapManager {
             .first!
             .appendingPathComponent("LangAutoSwitcher", isDirectory: true)
         return appSupport.appendingPathComponent("keymap.json")
+    }
+
+    /// The user's keymap.json as written on disk, or nil when absent.
+    /// Used to build language packs, which need the whole map rather than
+    /// just the entries that differ from the defaults.
+    static func userMap() -> [String: String]? {
+        guard let data = try? Data(contentsOf: fileURL),
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+        else { return nil }
+        return raw.filter { $0.key != "_README" }
     }
 
     /// Read keymap.json (creating with defaults if absent) and push the

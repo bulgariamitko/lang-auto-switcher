@@ -336,7 +336,7 @@ class InputController: IMKInputController {
             if let pending = pendingWord {
                 let pendingCyrillic = PhoneticMapper.toCyrillic(pending)
                 let firstResult = detector.processWord(String(parts.first ?? ""))
-                let pendingOutput = firstResult.language == .bulgarian ? pendingCyrillic : pending
+                let pendingOutput = firstResult.language.isBase ? pending : pendingCyrillic
                 client.insertText(pendingOutput + " " + output,
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
                 pendingWord = nil
@@ -363,8 +363,8 @@ class InputController: IMKInputController {
             let secondResult = resolved.next
 
             NSLog("LangAutoSwitcher: pending '%@' → '%@' [%@] (resolved by '%@'→'%@' [%@])",
-                  pending, pendingOutput, resolved.pending.language.rawValue,
-                  word, secondResult.converted, secondResult.language.rawValue)
+                  pending, pendingOutput, detector.code(for: resolved.pending.language),
+                  word, secondResult.converted, detector.code(for: secondResult.language))
 
             let fullText = pendingOutput + " " + secondResult.converted + trailing
             client.insertText(fullText,
@@ -405,7 +405,7 @@ class InputController: IMKInputController {
 
             NSLog("LangAutoSwitcher: '%@' → '%@' [%@, %.2f]",
                   word, result.converted,
-                  result.language.rawValue, result.confidence)
+                  detector.code(for: result.language), result.confidence)
 
             client.insertText(result.converted + trailing,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -626,31 +626,47 @@ class InputController: IMKInputController {
     override func menu() -> NSMenu! {
         let menu = NSMenu(title: "LangAutoSwitcher")
 
-        let currentDefault = detector.defaultLanguage
-        let headerItem = NSMenuItem(title: "Default for unknown words:", action: nil, keyEquivalent: "")
-        headerItem.isEnabled = false
-        menu.addItem(headerItem)
+        // Language management lives in dialogs rather than submenus.
+        // IMK does not dispatch actions for items nested inside a submenu —
+        // the menu renders and the click does nothing at all — and it also
+        // hands actions an NSDictionary rather than the clicked NSMenuItem.
+        // Both problems disappear if every menu action is a plain top-level
+        // item that takes no arguments and asks its question in a dialog.
+        let active = detector.activeLanguages
+            .map { detector.languageName(for: $0) }
+            .joined(separator: ", ")
+        let header = NSMenuItem(title: MenuStrings.t(.languages) + ": " + active,
+                                action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
 
-        let latinItem = NSMenuItem(title: "Keep Latin (EN)", action: #selector(setDefaultEnglish), keyEquivalent: "")
-        latinItem.target = self
-        latinItem.state = (currentDefault == .english) ? .on : .off
-        menu.addItem(latinItem)
+        let mainItem = NSMenuItem(title: MenuStrings.t(.leadLanguage) + "…",
+                                  action: #selector(chooseLeadLanguage), keyEquivalent: "")
+        mainItem.target = self
+        menu.addItem(mainItem)
 
-        let cyrillicItem = NSMenuItem(title: "Convert to Cyrillic (BG)", action: #selector(setDefaultBulgarian), keyEquivalent: "")
-        cyrillicItem.target = self
-        cyrillicItem.state = (currentDefault == .bulgarian) ? .on : .off
-        menu.addItem(cyrillicItem)
+        let addItem = NSMenuItem(title: MenuStrings.t(.addLanguage),
+                                 action: #selector(chooseLanguageToAdd), keyEquivalent: "")
+        addItem.target = self
+        menu.addItem(addItem)
+
+        if detector.activeLanguages.count > 1 {
+            let removeItem = NSMenuItem(title: MenuStrings.t(.removeLanguageMenu),
+                                        action: #selector(chooseLanguageToRemove), keyEquivalent: "")
+            removeItem.target = self
+            menu.addItem(removeItem)
+        }
 
         menu.addItem(NSMenuItem.separator())
 
-        let autocorrectItem = NSMenuItem(title: "Автокорекция (w → with)",
+        let autocorrectItem = NSMenuItem(title: MenuStrings.t(.autocorrect),
                                          action: #selector(toggleAutocorrect),
                                          keyEquivalent: "")
         autocorrectItem.target = self
         autocorrectItem.state = detector.autocorrectEnabled ? .on : .off
         menu.addItem(autocorrectItem)
 
-        let typoFixItem = NSMenuItem(title: "Поправяй печатни грешки (изтриеп → изтриеш)",
+        let typoFixItem = NSMenuItem(title: MenuStrings.t(.fixTypos),
                                      action: #selector(toggleTypoCorrection),
                                      keyEquivalent: "")
         typoFixItem.target = self
@@ -665,8 +681,8 @@ class InputController: IMKInputController {
         if let bundle = currentBundleID {
             let excluded = AppExclusionManager.isExcluded(bundle)
             let title = excluded
-                ? "Включи отново за: \(bundle)"
-                : "Изключи за: \(bundle)"
+                ? MenuStrings.t(.enableForApp, bundle)
+                : MenuStrings.t(.disableForApp, bundle)
             let appToggle = NSMenuItem(title: title,
                                        action: #selector(toggleCurrentAppExclusion),
                                        keyEquivalent: "")
@@ -675,13 +691,13 @@ class InputController: IMKInputController {
             menu.addItem(appToggle)
         }
 
-        let editExclusionsItem = NSMenuItem(title: "Редактирай списъка с изключения…",
+        let editExclusionsItem = NSMenuItem(title: MenuStrings.t(.editExclusions),
                                             action: #selector(editExcludedApps),
                                             keyEquivalent: "")
         editExclusionsItem.target = self
         menu.addItem(editExclusionsItem)
 
-        let reloadExclusionsItem = NSMenuItem(title: "Презареди списъка с изключения",
+        let reloadExclusionsItem = NSMenuItem(title: MenuStrings.t(.reloadExclusions),
                                               action: #selector(reloadExcludedApps),
                                               keyEquivalent: "")
         reloadExclusionsItem.target = self
@@ -689,19 +705,24 @@ class InputController: IMKInputController {
 
         menu.addItem(NSMenuItem.separator())
 
-        let editKeymapItem = NSMenuItem(title: "Edit Keymap…",
+        let showKeyboardItem = NSMenuItem(title: MenuStrings.t(.showKeyboard),
+                                          action: #selector(showKeyboardChart), keyEquivalent: "")
+        showKeyboardItem.target = self
+        menu.addItem(showKeyboardItem)
+
+        let editKeymapItem = NSMenuItem(title: MenuStrings.t(.editKeymap),
                                         action: #selector(editKeymap),
                                         keyEquivalent: "")
         editKeymapItem.target = self
         menu.addItem(editKeymapItem)
 
-        let reloadKeymapItem = NSMenuItem(title: "Reload Keymap",
+        let reloadKeymapItem = NSMenuItem(title: MenuStrings.t(.reloadKeymap),
                                           action: #selector(reloadKeymap),
                                           keyEquivalent: "")
         reloadKeymapItem.target = self
         menu.addItem(reloadKeymapItem)
 
-        let resetKeymapItem = NSMenuItem(title: "Reset Keymap to Defaults",
+        let resetKeymapItem = NSMenuItem(title: MenuStrings.t(.resetKeymap),
                                          action: #selector(resetKeymap),
                                          keyEquivalent: "")
         resetKeymapItem.target = self
@@ -710,26 +731,26 @@ class InputController: IMKInputController {
         menu.addItem(NSMenuItem.separator())
 
         // Learned ("always Latin") words — populated by ⌥⌘Z reverts.
-        let revertItem = NSMenuItem(title: "Върни последната дума (⌥⌘Z)",
+        let revertItem = NSMenuItem(title: MenuStrings.t(.revertLastWord),
                                     action: #selector(revertFromMenu),
                                     keyEquivalent: "")
         revertItem.target = self
         revertItem.isEnabled = lastConversion != nil
         menu.addItem(revertItem)
 
-        let editLearnedItem = NSMenuItem(title: "Научени думи… (\(detector.learnedWordCount))",
+        let editLearnedItem = NSMenuItem(title: MenuStrings.t(.learnedWords, "\(detector.learnedWordCount)"),
                                          action: #selector(editLearnedWords),
                                          keyEquivalent: "")
         editLearnedItem.target = self
         menu.addItem(editLearnedItem)
 
-        let reloadLearnedItem = NSMenuItem(title: "Презареди научените думи",
+        let reloadLearnedItem = NSMenuItem(title: MenuStrings.t(.reloadLearned),
                                            action: #selector(reloadLearnedWordsAction),
                                            keyEquivalent: "")
         reloadLearnedItem.target = self
         menu.addItem(reloadLearnedItem)
 
-        let clearLearnedItem = NSMenuItem(title: "Забрави всички научени думи",
+        let clearLearnedItem = NSMenuItem(title: MenuStrings.t(.forgetLearned),
                                           action: #selector(clearLearnedWordsAction),
                                           keyEquivalent: "")
         clearLearnedItem.target = self
@@ -738,7 +759,7 @@ class InputController: IMKInputController {
         menu.addItem(NSMenuItem.separator())
 
         // Forced ("always Bulgarian") words — populated by ⌥⌘B.
-        let forceItem = NSMenuItem(title: "Направи последната дума българска (⌥⌘B)",
+        let forceItem = NSMenuItem(title: MenuStrings.t(.forceToLanguage, detector.languageName(for: LanguagePackStore.leadCode)),
                                    action: #selector(forceBulgarianFromMenu),
                                    keyEquivalent: "")
         forceItem.target = self
@@ -746,7 +767,7 @@ class InputController: IMKInputController {
         menu.addItem(forceItem)
 
         let clearForcedItem = NSMenuItem(
-            title: "Забрави наложените български думи (\(detector.forcedBgWordCount))",
+            title: MenuStrings.t(.forgetForcedWords, "\(detector.forcedBgWordCount)"),
             action: #selector(clearForcedBgWordsAction),
             keyEquivalent: "")
         clearForcedItem.target = self
@@ -755,13 +776,18 @@ class InputController: IMKInputController {
 
         menu.addItem(NSMenuItem.separator())
 
-        let diagnosticsItem = NSMenuItem(title: "Диагностика…",
+        let aboutItem = NSMenuItem(title: MenuStrings.t(.aboutPage),
+                                   action: #selector(openAboutPage), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+
+        let diagnosticsItem = NSMenuItem(title: MenuStrings.t(.diagnostics),
                                          action: #selector(showDiagnostics),
                                          keyEquivalent: "")
         diagnosticsItem.target = self
         menu.addItem(diagnosticsItem)
 
-        let updateItem = NSMenuItem(title: "Check for Updates…",
+        let updateItem = NSMenuItem(title: MenuStrings.t(.checkForUpdates),
                                     action: #selector(checkForUpdates),
                                     keyEquivalent: "")
         updateItem.target = self
@@ -826,7 +852,7 @@ class InputController: IMKInputController {
             "Learned (always Latin) words: \(detector.learnedWordCount)",
             "Autocorrect: \(detector.autocorrectEnabled ? "on" : "off")",
             "Typo correction: \(detector.typoCorrectionEnabled ? "on" : "off")",
-            "Default for unknown words: \(detector.defaultLanguage.rawValue)",
+            "Default for unknown words: \(detector.code(for: detector.defaultLanguage))",
             "Current app: \(currentBundleID ?? "—") (passthrough: \(isTerminalApp ? "yes" : "no"))",
         ]
 
@@ -852,14 +878,219 @@ class InputController: IMKInputController {
         KeymapManager.resetToDefaults()
     }
 
-    @objc private func setDefaultEnglish() {
-        detector.defaultLanguage = .english
-        NSLog("LangAutoSwitcher: Default set to English (Latin)")
+    /// Make a language the lead: it wins ambiguous words and the menu is
+    /// written in it from now on.
+    /// Run a block that puts something on screen.
+    ///
+    /// The app ships with LSBackgroundOnly, which pins the activation policy to
+    /// `.prohibited` — a process in that state cannot display ANY window, so
+    /// `runModal()` returns immediately having shown nothing. That is why the
+    /// first attempts at a confirmation dialog appeared to do nothing at all.
+    /// Switching to `.accessory` for the duration allows windows without
+    /// putting the input method in the Dock, and the policy is restored after.
+    private func withVisibleUI<T>(_ body: () -> T) -> T {
+        let previous = NSApp.activationPolicy()
+        if previous != .accessory {
+            NSApp.setActivationPolicy(.accessory)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        defer {
+            if previous != .accessory {
+                NSApp.setActivationPolicy(previous)
+            }
+        }
+        return body()
     }
 
-    @objc private func setDefaultBulgarian() {
-        detector.defaultLanguage = .bulgarian
-        NSLog("LangAutoSwitcher: Default set to Bulgarian (Cyrillic)")
+    /// Ask the user to pick from a list, returning the chosen index.
+    ///
+    /// A popup inside an alert rather than a menu of menus: this app owns no
+    /// windows, and IMK will not deliver clicks from a submenu, so a dialog is
+    /// the only place a choice can reliably be made.
+    private func askToChoose(title: String, message: String, options: [String]) -> Int? {
+        guard !options.isEmpty else {
+            showMessage(title, MenuStrings.t(.nothingToChoose))
+            return nil
+        }
+        return withVisibleUI {
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = message
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: MenuStrings.t(.ok))
+            alert.addButton(withTitle: MenuStrings.t(.cancel))
+
+            let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26),
+                                      pullsDown: false)
+            popup.addItems(withTitles: options)
+            alert.accessoryView = popup
+            alert.window.level = .floating
+            alert.window.makeKeyAndOrderFront(nil)
+
+            guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+            return popup.indexOfSelectedItem
+        }
+    }
+
+    @objc private func chooseLanguageToAdd() {
+        DebugLog.write("chooseLanguageToAdd opened (policy=\(NSApp.activationPolicy().rawValue))")
+        let active = Set(detector.activeLanguages)
+        let candidates = KeyboardLayoutReader.availableLanguages()
+            .filter { !active.contains($0.languageCode) }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        guard let choice = askToChoose(title: MenuStrings.t(.addLanguage),
+                                       message: MenuStrings.t(.addLanguagePrompt),
+                                       options: candidates.map { $0.displayName }),
+              choice < candidates.count else { return }
+
+        let picked = candidates[choice]
+        DebugLog.write("chose \(picked.languageCode) (\(picked.displayName))")
+
+        if LanguagePackStore.isInstalled(picked.languageCode) {
+            LanguagePackStore.addLanguage(picked.languageCode)
+            notifyLanguageAdded(picked.displayName)
+            return
+        }
+        showMessage(MenuStrings.t(.downloading, picked.displayName),
+                    MenuStrings.t(.downloadingBody))
+        DictionaryDownloader.install(picked.languageCode) { result in
+            switch result {
+            case .success(let n):
+                DebugLog.write("download ok for \(picked.languageCode): \(n) words")
+                LanguagePackStore.addLanguage(picked.languageCode)
+                self.notifyLanguageAdded(picked.displayName)
+            case .failure(let error):
+                DebugLog.write("download FAILED for \(picked.languageCode): \(error.localizedDescription)")
+                self.showMessage(MenuStrings.t(.noDictionary, picked.displayName),
+                                 error.localizedDescription, style: .warning)
+            }
+        }
+    }
+
+    /// Show which key types which letter, for every enabled language at once.
+    ///
+    /// macOS's Keyboard Viewer cannot do this: it shows the SELECTED input
+    /// source, which while we are active is plain ABC. Asking which language
+    /// first was a needless step — there are only ever a handful enabled, and
+    /// seeing them together is what makes the differences obvious.
+    /// The page explaining what this app is, how to install it and how to use
+    /// it — the thing to send someone who asks "what is that icon".
+    private static let aboutPageURL =
+        URL(string: "https://claude.ai/code/artifact/d7b7425a-756f-467d-84b9-234c4ec2e717")!
+
+    @objc private func openAboutPage() {
+        DebugLog.write("openAboutPage")
+        NSWorkspace.shared.open(Self.aboutPageURL)
+    }
+
+    @objc private func showKeyboardChart() {
+        DebugLog.write("showKeyboardChart opened")
+        let codes = detector.activeLanguages
+        guard !codes.isEmpty else {
+            showMessage(MenuStrings.t(.showKeyboard), MenuStrings.t(.nothingToChoose))
+            return
+        }
+        let chart = codes.map { code in
+            let name = detector.languageName(for: code)
+            return name.uppercased() + "\n" +
+                KeyboardChart.render(keymap: detector.keymapPairs(for: code), languageName: name)
+        }.joined(separator: "\n\n" + String(repeating: "─", count: 44) + "\n\n")
+
+        withVisibleUI {
+            let alert = NSAlert()
+            alert.messageText = MenuStrings.t(.showKeyboard)
+            alert.informativeText = MenuStrings.t(.showKeyboardPrompt)
+            alert.addButton(withTitle: MenuStrings.t(.ok))
+
+            // Several layouts stack up taller than a screen, so the chart
+            // scrolls rather than being clipped.
+            let text = NSTextView()
+            text.string = chart
+            text.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+            text.isEditable = false
+            text.isSelectable = true
+            text.drawsBackground = false
+            text.sizeToFit()
+
+            let width = max(text.frame.width + 20, 420)
+            let height = min(text.frame.height + 20, 520)
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+            scroll.documentView = text
+            scroll.hasVerticalScroller = height >= 520
+            scroll.drawsBackground = false
+            alert.accessoryView = scroll
+
+            alert.window.level = .floating
+            alert.window.makeKeyAndOrderFront(nil)
+            alert.runModal()
+        }
+    }
+
+    @objc private func chooseLeadLanguage() {
+        DebugLog.write("chooseLeadLanguage opened")
+        let codes = detector.activeLanguages
+        let names = codes.map { detector.languageName(for: $0) }
+        guard let choice = askToChoose(title: MenuStrings.t(.leadLanguage),
+                                       message: MenuStrings.t(.leadLanguagePrompt),
+                                       options: names),
+              choice < codes.count else { return }
+        let code = codes[choice]
+        LanguagePackStore.leadCode = code
+        if let i = detector.index(of: code) {
+            detector.defaultLanguage = .language(i)
+        }
+        DebugLog.write("main language is now \(code)")
+        showMessage(MenuStrings.t(.leadLanguage), MenuStrings.t(.leadLanguageSet, names[choice]))
+    }
+
+    @objc private func chooseLanguageToRemove() {
+        DebugLog.write("chooseLanguageToRemove opened")
+        let codes = detector.activeLanguages.filter { $0 != LanguagePackStore.baseCode }
+        let names = codes.map { detector.languageName(for: $0) }
+        guard let choice = askToChoose(title: MenuStrings.t(.removeLanguageMenu),
+                                       message: MenuStrings.t(.removeLanguagePrompt),
+                                       options: names),
+              choice < codes.count else { return }
+        LanguagePackStore.removeLanguage(codes[choice])
+        DebugLog.write("removed \(codes[choice])")
+        notifyLanguageRemoved(names[choice])
+    }
+
+    /// Tell the user, visibly, what just happened.
+    ///
+    /// This app is LSBackgroundOnly/LSUIElement, so it owns no windows and is
+    /// never the active app — an NSAlert shown without activating first can
+    /// appear behind everything or not at all. Activating is what makes the
+    /// confirmation actually reach the user.
+    private func showMessage(_ title: String, _ detail: String, style: NSAlert.Style = .informational) {
+        DispatchQueue.main.async {
+            self.withVisibleUI {
+                let alert = NSAlert()
+                alert.messageText = title
+                alert.informativeText = detail
+                alert.alertStyle = style
+                alert.addButton(withTitle: MenuStrings.t(.ok))
+                alert.window.level = .floating
+                alert.window.makeKeyAndOrderFront(nil)
+                alert.runModal()
+            }
+        }
+    }
+
+    /// Confirmation that a language is now available. The detector builds its
+    /// languages when it starts, so a newly added one needs a relaunch before
+    /// it converts anything — say so plainly rather than leaving the user to
+    /// wonder why typing has not changed.
+    private func notifyLanguageAdded(_ name: String) {
+        showMessage(
+            MenuStrings.t(.languageAddedTitle, name),
+            MenuStrings.t(.languageAddedBody, name))
+    }
+
+    private func notifyLanguageRemoved(_ name: String) {
+        showMessage(
+            MenuStrings.t(.languageRemovedTitle, name),
+            MenuStrings.t(.restartNeeded))
     }
 
     @objc private func toggleAutocorrect() {
@@ -945,7 +1176,7 @@ class InputController: IMKInputController {
                 }
             }
             NSLog("LangAutoSwitcher: Activated for '%@' (passthrough=%d, default=%@)",
-                  bundleID, isTerminalApp, detector.defaultLanguage.rawValue)
+                  bundleID, isTerminalApp, detector.code(for: detector.defaultLanguage))
         }
     }
 

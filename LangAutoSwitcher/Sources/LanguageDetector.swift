@@ -85,26 +85,34 @@ private let bulgarianScoreCallback: @convention(c) (UnsafePointer<CChar>?) -> Do
 
 final class LanguageDetector {
 
-    enum DetectedLanguage: String {
-        case english = "EN"
-        case bulgarian = "BG"
-        case uncertain = "??"
+    /// Which language a word was decided to be. Carries the language's index
+    /// in the detector's pack list, so this is not limited to two — `.base`
+    /// names the Latin language that unknown words fall back to.
+    enum DetectedLanguage: Equatable {
+        case uncertain
+        case language(Int)
+
+        static let base = DetectedLanguage.language(0)
 
         fileprivate var asInt: Int32 {
             switch self {
-            case .english:   return LANGAUTO_LANG_ENGLISH
-            case .bulgarian: return LANGAUTO_LANG_BULGARIAN
             case .uncertain: return LANGAUTO_LANG_UNCERTAIN
+            case .language(let i): return Int32(i)
             }
         }
 
         fileprivate static func fromInt(_ i: Int32) -> DetectedLanguage {
-            switch i {
-            case LANGAUTO_LANG_BULGARIAN: return .bulgarian
-            case LANGAUTO_LANG_UNCERTAIN: return .uncertain
-            default: return .english
-            }
+            i < 0 ? .uncertain : .language(Int(i))
         }
+
+        var index: Int? {
+            if case .language(let i) = self { return i }
+            return nil
+        }
+
+        /// True when this is the Latin language the user types directly, so
+        /// the word needs no conversion.
+        var isBase: Bool { self == .base }
     }
 
     struct WordResult {
@@ -149,14 +157,14 @@ final class LanguageDetector {
 
     var defaultLanguage: DetectedLanguage {
         get {
-            guard let ptr = ptr else { return .english }
+            guard let ptr = ptr else { return .base }
             return DetectedLanguage.fromInt(langauto_detector_get_default_language(ptr))
         }
         set {
             if let ptr = ptr {
                 langauto_detector_set_default_language(ptr, newValue.asInt)
             }
-            UserDefaults.standard.set(newValue.rawValue, forKey: Self.defaultLangKey)
+            UserDefaults.standard.set(code(for: newValue), forKey: Self.defaultLangKey)
         }
     }
 
@@ -289,29 +297,164 @@ final class LanguageDetector {
     var enDictionary: DictionaryProxy { DictionaryProxy(detector: ptr, language: .en) }
     var bgDictionary: DictionaryProxy { DictionaryProxy(detector: ptr, language: .bg) }
 
-    private init() {
-        let enURL = Bundle.main.url(forResource: "en-dictionary", withExtension: "txt")
-        let bgURL = Bundle.main.url(forResource: "bg-dictionary", withExtension: "txt")
-        let enText = (try? enURL.flatMap { try String(contentsOf: $0, encoding: .utf8) }) ?? ""
-        let bgText = (try? bgURL.flatMap { try String(contentsOf: $0, encoding: .utf8) }) ?? ""
-        if enText.isEmpty || bgText.isEmpty {
-            NSLog("LangAutoSwitcher: WARNING — dictionary resource missing or empty (en: %d bytes, bg: %d bytes)",
-                  enText.utf8.count, bgText.utf8.count)
-        }
+    /// Languages the detector was built with, in pack order. Index 0 is the
+    /// Latin base.
+    private(set) var activeLanguages: [String] = []
 
-        let handle: OpaquePointer? = enText.withCString { enCStr in
-            bgText.withCString { bgCStr in
-                langauto_detector_new(enCStr, bgCStr)
-            }
+    /// The short code of a detected language, for logs and menus.
+    func code(for language: DetectedLanguage) -> String {
+        guard let i = language.index, i < activeLanguages.count else { return "??" }
+        return activeLanguages[i]
+    }
+
+    /// The keymap a language actually types with, for display. Built the same
+    /// way the pack was, so the chart cannot show something different from
+    /// what typing produces.
+    func keymapPairs(for code: String) -> [(Character, Character)] {
+        let layouts = Dictionary(
+            KeyboardLayoutReader.availableLanguages().map { ($0.languageCode, $0) },
+            uniquingKeysWith: { first, _ in first })
+        return Self.keymap(for: code, macOSLayout: layouts[code])
+    }
+
+    /// A language's name, written in the menu's own language: "български"
+    /// when the menu is Bulgarian, "Bulgarian" when it is English. Taken from
+    /// the system rather than a table, so it is right for all 150 languages.
+    /// Falls back to the keyboard layout's name ("Bulgarian – QWERTY"), which
+    /// is what the layout is called rather than what the language is called.
+    func languageName(for code: String) -> String {
+        let menuLocale = Locale(identifier: MenuStrings.current)
+        if let name = menuLocale.localizedString(forLanguageCode: code), !name.isEmpty {
+            return name
         }
+        return languageNames[code] ?? code
+    }
+
+    /// The index a language code occupies in the detector, if it is active.
+    func index(of code: String) -> Int? {
+        activeLanguages.firstIndex(of: code)
+    }
+
+    /// Display names for the menu, keyed by language code.
+    private(set) var languageNames: [String: String] = [:]
+
+    /// The keymap a language types with. The layering lives in
+    /// `LanguageKeymap` so the test target can verify it without pulling in
+    /// the Rust core.
+    private static func keymap(for code: String,
+                               macOSLayout: KeyboardLayoutReader.Layout?) -> [(Character, Character)] {
+        LanguageKeymap.build(for: code,
+                             systemLayout: macOSLayout?.keymap ?? [],
+                             userOverrides: KeymapManager.userMap())
+    }
+
+    /// Vowels, which a keyboard layout cannot tell us. Needed for the guard
+    /// that refuses to "correct" a word by swapping its final vowel, since in
+    /// inflected languages that is a different grammatical form rather than a
+    /// typo. A language we have no list for simply loses that guard.
+    private static func vowels(for code: String) -> String {
+        switch code {
+        case "bg": return "аеиоуъюяь"
+        case "ru", "uk", "sr", "mk", "be": return "аеиоуыэюяёіїєь"
+        case "el":  return "αειουηω"
+        default:    return "aeiouyåäöéèü"
+        }
+    }
+
+    /// Letters people mix up because the layout disagrees with how they would
+    /// romanise the language — not because the keys are close together. Only
+    /// pairs we have evidence for are listed.
+    private static func confusablePairs(for code: String) -> [(UInt32, UInt32)] {
+        let pairs: [(Character, Character)]
+        switch code {
+        case "bg":
+            // 'v' types ж where people mean в, 'y' types ъ where they mean й,
+            // 'x' types ь where they mean х. All three are real reports.
+            pairs = [("ж", "в"), ("ъ", "й"), ("ь", "х")]
+        default:
+            pairs = []
+        }
+        return pairs.compactMap { a, b in
+            guard let x = a.unicodeScalars.first, let y = b.unicodeScalars.first else { return nil }
+            return (x.value, y.value)
+        }
+    }
+
+    private init() {
+        // Which languages, and how each is typed, both come from the system
+        // rather than from hardcoded tables: the enabled list from the user's
+        // own input-source preference, the keymaps from macOS's own layouts.
+        let codes = LanguagePackStore.enabledCodes()
+        let layouts = Dictionary(
+            KeyboardLayoutReader.availableLanguages().map { ($0.languageCode, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let handle = langauto_detector_new_empty()
         self.ptr = handle
-        guard let ptr = handle else {
-            // Degrade to pass-through instead of crashing the host app:
-            // processWord returns input unchanged when ptr is nil, and the
-            // Diagnostics menu surfaces the zero dictionary counts.
+        guard let handle = handle else {
             NSLog("LangAutoSwitcher: ERROR — failed to create Rust detector; running in pass-through mode")
             return
         }
+
+        for code in codes {
+            guard let dict = LanguagePackStore.dictionaryText(for: code) else {
+                NSLog("LangAutoSwitcher: no dictionary installed for '%@' — skipping", code)
+                continue
+            }
+            let layout = layouts[code]
+            let isBase = (code == LanguagePackStore.baseCode)
+            let pairs = Self.keymap(for: code, macOSLayout: layout)
+            let name = layout?.displayName ?? code
+
+            var keys: [UInt32] = []
+            var letters: [UInt32] = []
+            for (k, l) in pairs {
+                guard let ks = k.unicodeScalars.first, let ls = l.unicodeScalars.first,
+                      k.unicodeScalars.count == 1, l.unicodeScalars.count == 1 else { continue }
+                keys.append(ks.value)
+                letters.append(ls.value)
+            }
+            let vowels = Self.vowels(for: code)
+            let confusables = Self.confusablePairs(for: code)
+            var ca = confusables.map { $0.0 }
+            var cb = confusables.map { $0.1 }
+
+            let index = code.withCString { idC in
+                name.withCString { nameC in
+                    dict.withCString { dictC in
+                        vowels.withCString { vowelC in
+                            keys.withUnsafeBufferPointer { kBuf in
+                                letters.withUnsafeBufferPointer { lBuf in
+                                    ca.withUnsafeMutableBufferPointer { aBuf in
+                                        cb.withUnsafeMutableBufferPointer { bBuf in
+                                            langauto_detector_add_pack(
+                                                handle, idC, nameC, dictC,
+                                                kBuf.baseAddress, lBuf.baseAddress, kBuf.count,
+                                                vowelC,
+                                                aBuf.baseAddress, bBuf.baseAddress, aBuf.count,
+                                                isBase ? 1 : 0)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if index >= 0 {
+                activeLanguages.append(code)
+                languageNames[code] = name
+                NSLog("LangAutoSwitcher: language '%@' (%@) ready — %d keys, %d words",
+                      code, name, keys.count, dict.split(separator: "\n").count)
+            }
+        }
+
+        if activeLanguages.isEmpty {
+            NSLog("LangAutoSwitcher: WARNING — no languages available; running in pass-through mode")
+        }
+
+        let ptr = handle
 
         // Install platform callbacks
         langauto_detector_set_en_spell_check(ptr, enSpellCheckCallback)
@@ -319,10 +462,15 @@ final class LanguageDetector {
         langauto_detector_set_en_score(ptr, englishScoreCallback)
         langauto_detector_set_bg_score(ptr, bulgarianScoreCallback)
 
-        // Restore persisted default language preference
-        if let stored = UserDefaults.standard.string(forKey: Self.defaultLangKey),
-           let lang = DetectedLanguage(rawValue: stored) {
-            langauto_detector_set_default_language(ptr, lang.asInt)
+        // Restore the preferred default language. Stored as a code rather
+        // than an index, because an index means something different as soon
+        // as the enabled set changes. "EN"/"BG" are what older versions
+        // wrote, so accept those too.
+        if let stored = UserDefaults.standard.string(forKey: Self.defaultLangKey) {
+            let code = ["EN": "en", "BG": "bg"][stored] ?? stored
+            if let i = activeLanguages.firstIndex(of: code) {
+                langauto_detector_set_default_language(ptr, Int32(i))
+            }
         }
 
         // Restore persisted autocorrect preference (default: off).
