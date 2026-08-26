@@ -170,7 +170,10 @@ class InputController: IMKInputController {
         case " ":
             // Space — commit the current word, then insert space
             commitComposingBuffer(client: client)
-            return false  // Let the space pass through normally
+            // While a word is held, the composition owns the space (it is
+            // drawn in the marked text and re-emitted on commit), so this
+            // keypress must not also reach the document.
+            return !Composition.spacePassesThrough(pending: pendingWord)
 
         default:
             break
@@ -223,11 +226,7 @@ class InputController: IMKInputController {
     /// Show the current buffer as "marked" (composing) text.
     private func updateMarkedText(client: IMKTextInput) {
         // Show pending word + current buffer together as marked text
-        var display = ""
-        if let pending = pendingWord {
-            display = pending + " "
-        }
-        display += composingBuffer
+        let display = Composition.markedText(pending: pendingWord, buffer: composingBuffer)
 
         let attrs: [NSAttributedString.Key: Any] = [
             .underlineStyle: NSUnderlineStyle.single.rawValue,
@@ -238,6 +237,15 @@ class InputController: IMKInputController {
         client.setMarkedText(marked,
                              selectionRange: NSRange(location: display.count, length: 0),
                              replacementRange: NSRange(location: NSNotFound, length: 0))
+
+        if display.isEmpty {
+            // An empty setMarkedText is not enough to end the composition in
+            // every client — Chromium apps keep drawing the last non-empty one,
+            // which is how a deleted word left an orphaned underlined letter
+            // behind. An empty insertText ends it for real.
+            client.insertText("",
+                              replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
     }
 
     /// Commit the composing buffer: detect language and insert final text.
@@ -268,13 +276,12 @@ class InputController: IMKInputController {
 
         // Emoticon detection: :D, :P, :-D, xD, etc. should stay raw ASCII.
         if TextHeuristics.isEmoticon(word) {
-            var fullText = ""
+            var pendingOutput: String? = nil
             if let pending = pendingWord {
-                let result = detector.processWord(pending)
-                fullText = result.converted + " "
+                pendingOutput = detector.processWord(pending).converted
                 pendingWord = nil
             }
-            fullText += word + trailing
+            let fullText = Composition.commit(pending: pendingOutput, next: word, trailing: trailing)
             client.insertText(fullText,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
             return
@@ -309,11 +316,7 @@ class InputController: IMKInputController {
         // commit as raw Latin without conversion.
         if TextHeuristics.isEmailOrUrl(word) {
             // Commit pending word too if any (also as raw, since it's likely the local-part)
-            var fullText = ""
-            if let pending = pendingWord {
-                fullText = pending
-            }
-            fullText += word + trailing
+            let fullText = Composition.commit(pending: pendingWord, next: word, trailing: trailing)
             client.insertText(fullText,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
             pendingWord = nil
@@ -337,7 +340,7 @@ class InputController: IMKInputController {
                 let pendingCyrillic = PhoneticMapper.toCyrillic(pending)
                 let firstResult = detector.processWord(String(parts.first ?? ""))
                 let pendingOutput = firstResult.language.isBase ? pending : pendingCyrillic
-                client.insertText(pendingOutput + " " + output,
+                client.insertText(Composition.commit(pending: pendingOutput, next: output),
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
                 pendingWord = nil
             } else {
@@ -366,7 +369,9 @@ class InputController: IMKInputController {
                   pending, pendingOutput, detector.code(for: resolved.pending.language),
                   word, secondResult.converted, detector.code(for: secondResult.language))
 
-            let fullText = pendingOutput + " " + secondResult.converted + trailing
+            let fullText = Composition.commit(pending: pendingOutput,
+                                              next: secondResult.converted,
+                                              trailing: trailing)
             client.insertText(fullText,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
             // Prefer the most recent converted token for ⌥⌘Z.
@@ -415,15 +420,20 @@ class InputController: IMKInputController {
 
     /// Force-commit everything (pending word + composing buffer).
     /// Used when we can't wait any longer (Enter, Cmd+key, punctuation, etc.)
-    private func forceCommitAll(client: IMKTextInput) {
+    private func forceCommitAll(client: IMKTextInput, restoreTrailingSpace: Bool = false) {
         if let pending = pendingWord {
             // No second word to help — commit pending with default language
             let result = detector.processWord(pending)
             let currentWord = composingBuffer.isEmpty ? "" : composingBuffer
 
             if currentWord.isEmpty {
-                // Just the pending word
-                client.insertText(result.converted,
+                // Just the pending word. The space the user typed after it was
+                // swallowed when the word went on hold, so put it back when the
+                // composition is ending for good (focus leaving). Punctuation
+                // callers want the character flush against the word, so they
+                // leave it off.
+                let output = result.converted + (restoreTrailingSpace ? " " : "")
+                client.insertText(output,
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
                 recordConversion(original: pending, converted: result.converted)
             } else {
@@ -569,12 +579,18 @@ class InputController: IMKInputController {
         }
     }
 
-    /// Commit raw Latin text without any conversion.
-    /// Used on Enter — the user wants to submit/accept what they see, not convert.
+    /// Commit the composing buffer raw, and the held word converted.
+    ///
+    /// Used on Enter. "Enter = submit as-is" applies to the word still being
+    /// typed — that is what keeps Chrome's address bar out of Cyrillic. It must
+    /// not apply to a *held* word: that one is finished (the user already typed
+    /// the space after it) and is only waiting for a right-hand neighbour that
+    /// is never coming. Dumping it raw is how "zaetost i" + Enter — the way you
+    /// send a message in Viber — sent "заетост i" instead of "заетост и".
     private func commitRawLatin(client: IMKTextInput) {
         var raw = ""
         if let pending = pendingWord {
-            raw += pending + " "
+            raw += detector.processWord(pending).converted + " "
         }
         if !composingBuffer.isEmpty {
             raw += composingBuffer
@@ -588,37 +604,34 @@ class InputController: IMKInputController {
     }
 
     /// Cancel composition without committing.
+    ///
+    /// Clears the marked text unconditionally. It used to be guarded by
+    /// `isComposing`, which made it a no-op in the one case that needs it
+    /// most: backspacing away the last letter of a word clears the buffer
+    /// first, so by the time this ran there was nothing left to "cancel" and
+    /// the client kept drawing the last composition it was handed. In TextEdit
+    /// that is invisible, but Chromium apps (Viber, Slack, VS Code) render the
+    /// orphan as an underlined letter or an empty box after the previous word.
     private func cancelComposition(client: IMKTextInput) {
-        if isComposing {
-            client.insertText("",
-                              replacementRange: NSRange(location: NSNotFound, length: 0))
-            composingBuffer = ""
-            pendingWord = nil
-        }
+        composingBuffer = ""
+        pendingWord = nil
+        client.setMarkedText(NSAttributedString(string: ""),
+                             selectionRange: NSRange(location: 0, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
     }
 
     /// Handle backspace — remove last character from buffer.
     private func handleBackspace(client: IMKTextInput) -> Bool {
-        if !composingBuffer.isEmpty {
-            composingBuffer.removeLast()
-            if composingBuffer.isEmpty && pendingWord == nil {
-                cancelComposition(client: client)
-            } else {
-                updateMarkedText(client: client)
-            }
-            return true
-        } else if pendingWord != nil {
-            // Backspace into the pending word
-            pendingWord!.removeLast()
-            if pendingWord!.isEmpty {
-                pendingWord = nil
-                cancelComposition(client: client)
-            } else {
-                updateMarkedText(client: client)
-            }
-            return true
+        guard isComposing else {
+            return false  // Not composing, let the app handle backspace
         }
-        return false  // Not composing, let the app handle backspace
+        (pendingWord, composingBuffer) = Composition.backspace(pending: pendingWord,
+                                                              buffer: composingBuffer)
+        // Always redraw, including when the composition just became empty —
+        // that redraw is what clears the marked text. Branching to a "cancel"
+        // path here is how the orphaned letter got left behind before.
+        updateMarkedText(client: client)
+        return true
     }
 
     // MARK: - Menu
@@ -1182,7 +1195,9 @@ class InputController: IMKInputController {
 
     override func deactivateServer(_ sender: Any!) {
         let client = sender as! IMKTextInput
-        forceCommitAll(client: client)
+        // Focus is leaving: nothing more is coming, so the held word keeps the
+        // space the user typed after it.
+        forceCommitAll(client: client, restoreTrailingSpace: true)
         super.deactivateServer(sender)
         NSLog("LangAutoSwitcher: Deactivated")
     }

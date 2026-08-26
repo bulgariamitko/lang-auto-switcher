@@ -45,6 +45,8 @@ targets:
       # Keymap layering: pure Swift, so it can be tested without the Rust core.
       - path: LangAutoSwitcher/Sources/LanguageKeymap.swift
       - path: LangAutoSwitcher/Sources/ShippedKeymaps.swift
+      # Composing-buffer bookkeeping: pure Swift, no IMK.
+      - path: LangAutoSwitcher/Sources/Composition.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dklaturov.LangAutoSwitcherTests
