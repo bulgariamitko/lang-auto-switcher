@@ -24,9 +24,30 @@ class InputController: IMKInputController {
     /// Whether we are actively composing (have uncommitted text).
     private var isComposing: Bool { !composingBuffer.isEmpty || pendingWord != nil }
 
-    /// A word that was ambiguous (in both dictionaries, no context).
-    /// We hold it and wait for the next word to decide its language.
+    /// The word(s) held back because they were ambiguous (a real word in both
+    /// dictionaries) with nothing on the left to settle them. We wait for the
+    /// word on the right to decide.
+    ///
+    /// Usually one word, but a run of them when each new word is ambiguous too
+    /// — "move li" (може ли) opens a message with two words that are both also
+    /// English, so the first one's neighbour has no vote to cast either. The
+    /// run is stored space-joined, which is exactly how it has to be drawn and
+    /// committed, so `Composition` needs to know nothing about it.
     private var pendingWord: String? = nil
+
+    /// How many words may be held at once before we stop waiting and commit.
+    /// Every held word is marked text the user can see sitting there, so the
+    /// look-ahead has to end even if the ambiguity never does.
+    private static let maxHeldWords = 3
+
+    /// Convert a held run, one word at a time, joined back the way it is drawn.
+    /// The detector only takes single words, so a run must not be handed to it
+    /// whole — it would see one unspellable token and leave the lot as typed.
+    private func convertHeldRun(_ pending: String) -> String {
+        pending.split(separator: " ")
+            .map { detector.processWord(String($0)).converted }
+            .joined(separator: " ")
+    }
 
     /// The last commit where conversion actually changed the text
     /// (original as typed, converted as inserted). ⌥⌘Z reverts it and
@@ -278,7 +299,7 @@ class InputController: IMKInputController {
         if TextHeuristics.isEmoticon(word) {
             var pendingOutput: String? = nil
             if let pending = pendingWord {
-                pendingOutput = detector.processWord(pending).converted
+                pendingOutput = convertHeldRun(pending)
                 pendingWord = nil
             }
             let fullText = Composition.commit(pending: pendingOutput, next: word, trailing: trailing)
@@ -358,7 +379,21 @@ class InputController: IMKInputController {
         let isBulgarian = detector.bgDictionary.contains(cyrillicLower)
         let isAmbiguous = isEnglish && isBulgarian
 
-        if let pending = pendingWord {
+        if let pending = pendingWord,
+           isAmbiguous,
+           trailing.isEmpty,
+           pending.split(separator: " ").count < Self.maxHeldWords {
+            // The word we were waiting on is ambiguous itself, so it has no
+            // vote to cast — keep waiting, with this word added to the run.
+            // Without this a message opening "move li da..." (може ли да)
+            // resolved "move" against a neighbour that was just as undecided
+            // and fell back to English, leaving the first two words Latin in
+            // an otherwise Cyrillic sentence.
+            pendingWord = pending + " " + word
+            NSLog("LangAutoSwitcher: still ambiguous, holding run '%@'", pendingWord ?? "")
+            updateMarkedText(client: client)
+
+        } else if let pending = pendingWord {
             // Decide the held word using BOTH neighbours, then the current
             // word with the held one in context. The core does the ordering.
             let resolved = detector.resolvePending(pending, next: word)
@@ -423,7 +458,7 @@ class InputController: IMKInputController {
     private func forceCommitAll(client: IMKTextInput, restoreTrailingSpace: Bool = false) {
         if let pending = pendingWord {
             // No second word to help — commit pending with default language
-            let result = detector.processWord(pending)
+            let pendingAlone = convertHeldRun(pending)
             let currentWord = composingBuffer.isEmpty ? "" : composingBuffer
 
             if currentWord.isEmpty {
@@ -432,10 +467,10 @@ class InputController: IMKInputController {
                 // composition is ending for good (focus leaving). Punctuation
                 // callers want the character flush against the word, so they
                 // leave it off.
-                let output = result.converted + (restoreTrailingSpace ? " " : "")
+                let output = pendingAlone + (restoreTrailingSpace ? " " : "")
                 client.insertText(output,
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
-                recordConversion(original: pending, converted: result.converted)
+                recordConversion(original: pending, converted: pendingAlone)
             } else {
                 // Pending + space + current word. The buffered word is the
                 // right-hand neighbour we were waiting for, so resolve the
@@ -567,8 +602,7 @@ class InputController: IMKInputController {
     private func commitBufferRaw(client: IMKTextInput) {
         var output = ""
         if let pending = pendingWord {
-            let result = detector.processWord(pending)
-            output = result.converted + " "
+            output = convertHeldRun(pending) + " "
             pendingWord = nil
         }
         output += composingBuffer
@@ -590,7 +624,7 @@ class InputController: IMKInputController {
     private func commitRawLatin(client: IMKTextInput) {
         var raw = ""
         if let pending = pendingWord {
-            raw += detector.processWord(pending).converted + " "
+            raw += convertHeldRun(pending) + " "
         }
         if !composingBuffer.isEmpty {
             raw += composingBuffer

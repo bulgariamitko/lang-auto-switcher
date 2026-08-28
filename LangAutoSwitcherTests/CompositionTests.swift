@@ -127,4 +127,32 @@ final class CompositionTests: XCTestCase {
         XCTAssertNil(pending)
         XCTAssertEqual(Composition.markedText(pending: pending, buffer: buffer), "eno")
     }
+
+    // MARK: - A run of held words
+
+    /// Two ambiguous words in a row are held together, and the run is drawn
+    /// exactly as it will be committed: the words with single spaces between
+    /// them, and still no trailing space before the word being typed.
+    func testAHeldRunIsDrawnAsPlainWords() {
+        XCTAssertEqual(Composition.markedText(pending: "move li", buffer: ""), "move li")
+        XCTAssertEqual(Composition.markedText(pending: "move li", buffer: "d"), "move li d")
+        XCTAssertEqual(Composition.commit(pending: "може ли", next: "да"), "може ли да")
+    }
+
+    /// Backspacing through a run eats it one character at a time and ends
+    /// with nothing marked. The display never grows, no keypress is a no-op,
+    /// and the one two-character step is the same one the single-word case
+    /// already has: emptying the buffer also takes away the space that was
+    /// only being drawn because something followed it.
+    func testBackspaceEatsARunDownToNothing() {
+        var (pending, buffer) = (String?.some("move li"), "da")
+        var lengths = [Composition.markedText(pending: pending, buffer: buffer).count]
+        for _ in 0..<12 {
+            (pending, buffer) = Composition.backspace(pending: pending, buffer: buffer)
+            lengths.append(Composition.markedText(pending: pending, buffer: buffer).count)
+        }
+        XCTAssertEqual(lengths, [10, 9, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0])
+        XCTAssertNil(pending)
+        XCTAssertEqual(Composition.markedText(pending: pending, buffer: buffer), "")
+    }
 }

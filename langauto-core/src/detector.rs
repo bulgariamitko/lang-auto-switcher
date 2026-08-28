@@ -236,7 +236,7 @@ impl LanguageDetector {
         self.recent_latin_words = s.recent_latin_words;
     }
 
-    /// Decide a held-back word using the words on BOTH sides of it.
+    /// Decide held-back word(s) using the words on BOTH sides of them.
     ///
     /// The caller holds `pending` (typically ambiguous, with no decisive left
     /// neighbour), then hands it back together with the `next` word the user
@@ -253,7 +253,18 @@ impl LanguageDetector {
     /// also what keeps the context honest: the older code committed the held
     /// word straight to the screen without ever telling the detector about it,
     /// so a held word was invisible to everything that followed.
+    ///
+    /// `pending` may be SEVERAL words separated by spaces. A message that
+    /// opens with two ambiguous words in a row ("move li" — може ли, where
+    /// both spellings are also English) gives the first word a neighbour that
+    /// cannot vote, so the caller keeps holding and hands the whole run over
+    /// once a decisive word finally arrives. Every held word is then decided
+    /// against that same right-hand evidence, in the order it was typed. The
+    /// returned `converted` is the run joined back with single spaces, and its
+    /// language is the first word's — the one the caller held first.
     pub fn resolve_pending(&mut self, pending: &str, next: &str) -> (WordResult, WordResult) {
+        let held: Vec<&str> = pending.split(' ').filter(|w| !w.is_empty()).collect();
+
         let snap = self.snapshot();
         let peek = self.process_word(next);
         self.restore(snap);
@@ -266,10 +277,26 @@ impl LanguageDetector {
             lang if peek.confidence >= 0.9 => Some(lang),
             _ => None,
         };
-        let pending_result = self.process_word(pending);
+        // The hint stays in place for the whole run: one decisive word to the
+        // right of all of them is evidence about all of them.
+        let decided: Vec<WordResult> = held.iter().map(|w| self.process_word(w)).collect();
         self.right_hint = None;
 
         let next_result = self.process_word(next);
+
+        let pending_result = match decided.split_first() {
+            None => self.process_word(pending),
+            Some((first, _)) => WordResult {
+                original: pending.to_string(),
+                converted: decided
+                    .iter()
+                    .map(|r| r.converted.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                language: first.language,
+                confidence: first.confidence,
+            },
+        };
         (pending_result, next_result)
     }
 
@@ -1392,6 +1419,41 @@ mod tests {
 
         d.process_word("qqqq"); // unknown → Uncertain, context untouched
         assert!(d.last_context_is_decisive(), "a pass-through word leaves the left signal intact");
+    }
+
+    #[test]
+    fn a_run_of_held_words_is_decided_by_the_first_decisive_one() {
+        // "може ли да те помоля" typed phonetically opens with TWO words that
+        // are also English ("move" and "li"), so the first word's neighbour
+        // cannot vote and one-word look-ahead falls back to English. The
+        // caller keeps holding and hands the whole run over once "da" — a
+        // Bulgarian-only word — arrives.
+        let en: HashSet<String> = ["move", "li", "to"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["може", "ли", "да", "те"].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        let (held, next) = d.resolve_pending("move li", "da");
+        assert_eq!(held.converted, "може ли",
+            "both held words must follow the decisive word to their right, got {:?}",
+            held.converted);
+        assert_eq!(held.language, DetectedLanguage::BULGARIAN);
+        assert_eq!(next.converted, "да");
+
+        // The run really is in the context now, so what follows keeps flowing.
+        assert_eq!(d.process_word("te").converted, "те");
+    }
+
+    #[test]
+    fn a_held_run_still_follows_an_english_neighbour() {
+        // The same mechanism must not become a one-way street into Bulgarian:
+        // when the decisive word to the right is English, so is the run.
+        let en: HashSet<String> = ["move", "li", "faster"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["може", "ли"].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        let (held, next) = d.resolve_pending("move li", "faster");
+        assert_eq!(held.converted, "move li");
+        assert_eq!(next.converted, "faster");
     }
 
     #[test]

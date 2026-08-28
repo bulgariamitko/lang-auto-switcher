@@ -213,6 +213,34 @@ pub fn keys_adjacent_in(pack: &LanguagePack, a: char, b: char) -> bool {
     }
 }
 
+/// The four rows of a US keyboard, used to tell a sideways roll of the
+/// fingers from a merely nearby key.
+const KEYBOARD_ROWS: [&str; 4] = [
+    "`1234567890-=",
+    "qwertyuiop[]\\",
+    "asdfghjkl;'",
+    "zxcvbnm,./",
+];
+
+/// Are these two letters typed on keys that sit side by side in the SAME row?
+///
+/// Stricter than `keys_adjacent_in`, which also counts the rows above and
+/// below. A finger rolling sideways brushes the key next to its target
+/// ("pos" typed "pods": d and s are neighbours on the home row); reaching a
+/// row away is a different motion, and treating it as one triples the number
+/// of correct words that get rewritten.
+pub fn keys_rolled_in(pack: &LanguagePack, a: char, b: char) -> bool {
+    let (ka, kb) = match (pack.key_for(a), pack.key_for(b)) {
+        (Some(ka), Some(kb)) => (ka, kb),
+        _ => return false,
+    };
+    KEYBOARD_ROWS.iter().any(|row| {
+        let keys: Vec<char> = row.chars().collect();
+        keys.windows(2)
+            .any(|w| (w[0] == ka && w[1] == kb) || (w[0] == kb && w[1] == ka))
+    })
+}
+
 /// Best single-edit repair for a word no language recognised, or None to
 /// leave it exactly as typed.
 ///
@@ -232,7 +260,8 @@ pub fn keys_adjacent_in(pack: &LanguagePack, a: char, b: char) -> bool {
 ///   swap lands on another real word, and reaching a far key is not a slip.
 /// * Substituting the final vowel, even between neighbours — that is
 ///   inflection, not typing.
-/// * Deleting an arbitrary letter (now only a doubled one — a bounced key).
+/// * Deleting an arbitrary letter (now only a doubled one — a bounced key —
+///   or a consonant rolled over its same-row neighbour, which costs 0.6%).
 /// * Inserting a letter: 30 letters at any position reaches a real word far
 ///   too easily to trust.
 pub fn best_typo_fix(word: &str, pack: &LanguagePack) -> Option<String> {
@@ -289,13 +318,26 @@ pub fn best_typo_fix(word: &str, pack: &LanguagePack) -> Option<String> {
         }
     }
 
-    // Deletion, but only of a doubled letter: the key bounced and typed
-    // twice. Dropping an arbitrary letter turns "агора" into "гора", which is
-    // word substitution rather than typo repair.
+    // Deletion of ONE letter the finger added on its way past. Dropping an
+    // arbitrary letter turns "агора" into "гора", which is word substitution
+    // rather than typo repair, so only two motions qualify:
+    //
+    // * a doubled letter — the key bounced and typed twice;
+    // * a consonant sitting next to a consonant it shares a keyboard row
+    //   with — the finger rolled sideways over its neighbour ("постановките"
+    //   typed "подстановките": д and с are typed d and s, side by side on the
+    //   home row). Vowels are excluded because Bulgarian inflects through
+    //   them, and rows above/below are excluded because reaching them is a
+    //   deliberate motion, not a roll.
     for i in 0..len {
         let doubled = (i > 0 && chars[i] == chars[i - 1])
             || (i + 1 < len && chars[i] == chars[i + 1]);
-        if !doubled {
+        let rolled = !pack.is_vowel(chars[i])
+            && ((i > 0 && !pack.is_vowel(chars[i - 1]) && keys_rolled_in(pack, chars[i], chars[i - 1]))
+                || (i + 1 < len
+                    && !pack.is_vowel(chars[i + 1])
+                    && keys_rolled_in(pack, chars[i], chars[i + 1])));
+        if !doubled && !rolled {
             continue;
         }
         let mut candidate = chars.clone();
@@ -586,6 +628,33 @@ mod tests {
         // must still be repaired — this is the "изтриеп" → "изтриеш" case.
         let pack2 = bg_pack(&["изтриеш"]);
         assert_eq!(best_typo_fix("изтриеп", &pack2), Some("изтриеш".to_string()));
+    }
+
+    #[test]
+    fn a_letter_rolled_over_its_row_neighbour_is_deleted() {
+        // Real user report: "постановките" typed "podstanowkite" — the finger
+        // rolled across d on its way to s, and both are consonants side by
+        // side on the home row.
+        let pack = bg_pack(&["постановките"]);
+        assert_eq!(
+            best_typo_fix("подстановките", &pack),
+            Some("постановките".to_string())
+        );
+    }
+
+    #[test]
+    fn a_roll_must_be_two_consonants_in_the_same_row() {
+        // в is typed 'w' and с is typed 's' — near each other, but a row
+        // apart. "боядисва" is a correct word one such deletion away from
+        // "боядиса", and the -св- cluster runs through hundreds of verbs, so
+        // counting a diagonal as a roll would rewrite all of them.
+        let pack = bg_pack(&["боядиса"]);
+        assert_eq!(best_typo_fix("боядисва", &pack), None);
+        // Neither may the letter dropped be a vowel: Bulgarian inflects
+        // through its vowels, so that is grammar, not a slip. о and и are
+        // typed 'o' and 'i', side by side.
+        let pack2 = bg_pack(&["бра"]);
+        assert_eq!(best_typo_fix("биоа", &pack2), None);
     }
 
     #[test]
