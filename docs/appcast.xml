@@ -1010,5 +1010,45 @@ Slack го рисуват като квадратче. Вече се показ�
                 type="application/octet-stream"
                 sparkle:edSignature="7+coz69cXSlXX3KjgFAWmTH+/68aFDzrTYpD5j5Sj6juq7x+hhwsmDqrVX3r7JZaHUw5Y0ZZSXu/pMSCerjzAw==" />
         </item>
+        <item>
+            <title>Version 2.9.3</title>
+            <pubDate>Fri, 28 Aug 2026 11:42:51 GMT</pubDate>
+            <sparkle:version>20903</sparkle:version>
+            <sparkle:shortVersionString>2.9.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  kbd { font-family: ui-monospace, monospace; font-size: 12px; }
+  code { font-family: ui-monospace, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+
+<h2>v2.9.3 — Нов ред, нова мисъл</h2>
+
+<h3>Предишното съобщение вече не решава следващото</h3>
+<p>Дума, която съществува и на двата езика, следва езика на съседните думи. Но
+съседството не спираше при <kbd>Enter</kbd> — последната дума на изпратеното
+съобщение решаваше първата дума на следващото:</p>
+<ul>
+  <li>преди: български абзац → <kbd>Enter</kbd> → <code>ордер only 5 pieces</code></li>
+  <li>сега: <code>order only 5 pieces</code></li>
+</ul>
+<p><kbd>Enter</kbd> приключва мисълта — изпратено съобщение или нов абзац — и
+това, което е било преди него, вече не се брои за улика. Първата дума на новия
+ред се решава наново, от думите след нея.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.9.3/LangAutoSwitcher-v2.9.3.zip"
+                length="4075308"
+                type="application/octet-stream"
+                sparkle:edSignature="YrZI+KqE4iI6RGQ8SIgnRg/lVVn70ecoO+ip+7brCAvuSvo6GLOw0d2xP4AYigkV5yWlnQOsPSD3SEo6A6KtDA==" />
+        </item>
     </channel>
 </rss>
