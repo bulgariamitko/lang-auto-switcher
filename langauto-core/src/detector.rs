@@ -1557,6 +1557,32 @@ mod tests {
     }
 
     #[test]
+    fn a_boundary_stops_the_previous_thought_deciding_the_next_word() {
+        // Real user report: a Bulgarian message, Enter, then "order only" —
+        // which came out "ордер only". "печат" is a Bulgarian-only exact hit,
+        // so the left side counted as decisive and settled "order" before the
+        // look-ahead could run. Enter now resets the context, which both
+        // un-decides the left side and lets the word be held for its right
+        // neighbour instead.
+        let en: HashSet<String> = ["order", "only"].iter().map(|s| s.to_string()).collect();
+        let bg: HashSet<String> = ["печат", "ордер"].iter().map(|s| s.to_string()).collect();
+        let mut d = LanguageDetector::new(en, bg);
+
+        d.process_word("pe`at");
+        assert!(d.last_context_is_decisive(),
+            "the last word of the previous message is a single-dictionary hit");
+        assert_eq!(d.process_word("order").converted, "ордер",
+            "this is the bug: stale context decides the word");
+
+        d.reset_context();
+        assert!(!d.last_context_is_decisive(),
+            "after the boundary there is nothing to the left, so the caller holds the word");
+        let (held, next) = d.resolve_pending("order", "only");
+        assert_eq!(held.converted, "order");
+        assert_eq!(next.converted, "only");
+    }
+
+    #[test]
     fn reset_context_clears_state() {
         let mut d = LanguageDetector::new(english_dict(), bulgarian_dict());
         d.process_word("hello");

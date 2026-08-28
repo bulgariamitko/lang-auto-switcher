@@ -1,0 +1,26 @@
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  kbd { font-family: ui-monospace, monospace; font-size: 12px; }
+  code { font-family: ui-monospace, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+
+<h2>v2.9.3 — Нов ред, нова мисъл</h2>
+
+<h3>Предишното съобщение вече не решава следващото</h3>
+<p>Дума, която съществува и на двата езика, следва езика на съседните думи. Но
+съседството не спираше при <kbd>Enter</kbd> — последната дума на изпратеното
+съобщение решаваше първата дума на следващото:</p>
+<ul>
+  <li>преди: български абзац → <kbd>Enter</kbd> → <code>ордер only 5 pieces</code></li>
+  <li>сега: <code>order only 5 pieces</code></li>
+</ul>
+<p><kbd>Enter</kbd> приключва мисълта — изпратено съобщение или нов абзац — и
+това, което е било преди него, вече не се брои за улика. Първата дума на новия
+ред се решава наново, от думите след нея.</p>

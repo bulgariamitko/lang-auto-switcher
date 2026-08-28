@@ -177,6 +177,13 @@ class InputController: IMKInputController {
             // This prevents Chrome address bar from getting Bulgarian text
             // when user wants to navigate to a URL or accept autocomplete.
             commitRawLatin(client: client)
+            // Enter ends the thought: a sent message, a new paragraph. What
+            // came before it is no longer evidence about what comes after, and
+            // keeping it was actively wrong — after a Bulgarian message,
+            // "order only" opened the next one as "ордер only", because the
+            // last word of the PREVIOUS message was a decisive Bulgarian hit
+            // and settled "order" before the look-ahead ever ran.
+            detector.resetContext()
             return false
 
         case "\u{1B}":
