@@ -102,6 +102,18 @@ class InputController: IMKInputController {
 
         let client = sender as! IMKTextInput
 
+        // No text field has focus (Finder's file list, a sidebar, …): macOS
+        // hands us its stand-in "floating input window" client, which says so
+        // through the private `__NSUsesFloatingInputWindow` attribute. Composing
+        // there opens a thin full-width window that swallows the keys, so
+        // Finder's type-to-select ("c" → jump to the first item starting with
+        // C) never sees them. Pass the key straight to the app instead.
+        if !isComposing,
+           let valid = client.validAttributesForMarkedText() as? [String],
+           valid.contains("__NSUsesFloatingInputWindow") {
+            return false
+        }
+
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         // Backspace/Delete (keyCode 51) is handled by keyCode here — BEFORE the
