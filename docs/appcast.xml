@@ -1050,5 +1050,44 @@ Slack го рисуват като квадратче. Вече се показ�
                 type="application/octet-stream"
                 sparkle:edSignature="YrZI+KqE4iI6RGQ8SIgnRg/lVVn70ecoO+ip+7brCAvuSvo6GLOw0d2xP4AYigkV5yWlnQOsPSD3SEo6A6KtDA==" />
         </item>
+        <item>
+            <title>Version 2.9.4</title>
+            <pubDate>Thu, 22 Oct 2026 08:46:35 GMT</pubDate>
+            <sparkle:version>20904</sparkle:version>
+            <sparkle:shortVersionString>2.9.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  kbd { font-family: ui-monospace, monospace; font-size: 12px; }
+  code { font-family: ui-monospace, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+<h2>v2.9.4 — Буква във Finder</h2>
+
+<h3>Писане на буква в папка отново избира файла</h3>
+<p>Във Finder, когато не пишеш в текстово поле, натискането на буква избира първия
+файл или папка, която започва с нея. С LangAutoSwitcher вместо това се отваряше
+тънък прозорец през целия екран и буквата отиваше там:</p>
+<ul>
+  <li>преди: в „Изтегляния“ натискаш <kbd>c</kbd> → празен прозорец с <code>c</code></li>
+  <li>сега: <kbd>c</kbd> → избира се първата папка, започваща с C</li>
+</ul>
+<p>Когато няма текстово поле на фокус, буквите отиват направо в приложението.
+В текстовите полета — търсене, преименуване, „Go to Folder“ — превключването на
+кирилица работи както досега.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.9.4/LangAutoSwitcher-v2.9.4.zip"
+                length="4054776"
+                type="application/octet-stream"
+                sparkle:edSignature="80wt5samtHrvKAaFdFFoG7UOfOno/VYwOxuQW2J2LrdG9VWON4DjMcKAeKm62gZPgRrgrfziBNVlIl2LavrFDA==" />
+        </item>
     </channel>
 </rss>
