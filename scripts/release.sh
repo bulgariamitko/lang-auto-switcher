@@ -29,7 +29,9 @@ APP_PATH="$TMP_BUILD/Release/$APP"
 ZIP_NAME="LangAutoSwitcher-v${VERSION}.zip"
 ZIP_PATH="$TMP_BUILD/$ZIP_NAME"
 FINAL_ZIP="$REPO_ROOT/$ZIP_NAME"
-IDENTITY="Developer ID Application: Dimitar Klaturov (75668RQCMG)"
+# Override with a certificate SHA-1 when the keychain holds two certs of the
+# same name (e.g. after renewing), which makes the name ambiguous to codesign.
+IDENTITY="${SIGN_IDENTITY:-Developer ID Application: Dimitar Klaturov (75668RQCMG)}"
 NOTARY_PROFILE="langauto-notary"
 ENTITLEMENTS="$REPO_ROOT/LangAutoSwitcher/LangAutoSwitcher.entitlements"
 
