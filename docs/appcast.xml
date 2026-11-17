@@ -1089,5 +1089,59 @@ Slack го рисуват като квадратче. Вече се показ�
                 type="application/octet-stream"
                 sparkle:edSignature="80wt5samtHrvKAaFdFFoG7UOfOno/VYwOxuQW2J2LrdG9VWON4DjMcKAeKm62gZPgRrgrfziBNVlIl2LavrFDA==" />
         </item>
+        <item>
+            <title>Version 2.9.5</title>
+            <pubDate>Tue, 17 Nov 2026 20:39:37 GMT</pubDate>
+            <sparkle:version>20905</sparkle:version>
+            <sparkle:shortVersionString>2.9.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  kbd { font-family: ui-monospace, monospace; font-size: 12px; }
+  code { font-family: ui-monospace, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+<h2>v2.9.5 — Думи, които оставаха на латиница</h2>
+
+<h3>„й“ вече се преобразува</h3>
+<ul>
+  <li>преди: <code>trqbwa da j ima[</code> → „трябва да j имаш“</li>
+  <li>сега: → „трябва да й имаш“</li>
+</ul>
+
+<h3>Думи с членуване не се разделят</h3>
+<p>Дума, която я няма в речника, но е позната дума с член (-те, -та, -то), остава цяла:</p>
+<ul>
+  <li>преди: <code>fakturite</code> → „фактури те“</li>
+  <li>сега: → „фактурите“</li>
+</ul>
+
+<h3>Число не спира решението за предните думи</h3>
+<p>Когато няколко думи съществуват и на двата езика, приложението изчаква
+следващата дума. Ако следващото беше число, думите оставаха на латиница:</p>
+<ul>
+  <li>преди: <code>moje da stane i to 10 §asa</code> → „... stane i to 10 часа“</li>
+  <li>сега: → „... стане и то 10 часа“</li>
+</ul>
+
+<h3>Поправките в речника вече стигат до всички</h3>
+<p>Речникът се копираше на компютъра при първото пускане и после не се
+обновяваше, така че добавените по-късно думи не стигаха до вече инсталираните
+версии. Сега се обновява с всяка нова версия. Добавени са и „синхронизирал“,
+„флаери“ и други форми.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.9.5/LangAutoSwitcher-v2.9.5.zip"
+                length="4059345"
+                type="application/octet-stream"
+                sparkle:edSignature="2pyAeszlJPMmSTYqQe7nfUjx0krpaDF/+wMhG71OHYnHgXYwv28ko36y4PilbLJwnXrGYSSSPVmSodqdokFVDw==" />
+        </item>
     </channel>
 </rss>
