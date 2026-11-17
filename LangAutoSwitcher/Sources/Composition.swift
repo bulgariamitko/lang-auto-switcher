@@ -39,17 +39,50 @@ enum Composition {
 
     /// Backspace while composing. Returns the new (pending, buffer).
     ///
-    /// With an empty buffer the last thing on screen is the held word itself
-    /// (its space is not drawn — see `markedText`), so backspace takes the
-    /// word off hold and deletes its last letter. Every keypress removes
-    /// exactly one visible character, which is the whole point.
+    /// With an empty buffer the last thing on screen is the last held word
+    /// (its space is not drawn — see `markedText`), so backspace takes THAT
+    /// word off hold and deletes its last letter; any words held before it
+    /// stay held. Moving the whole run into the buffer made "move li" one
+    /// token with a space inside, which no dictionary contains, so the run
+    /// committed as Latin.
     static func backspace(pending: String?, buffer: String) -> (pending: String?, buffer: String) {
         if !buffer.isEmpty {
             return (pending, String(buffer.dropLast()))
         }
-        if let pending {
-            return (nil, String(pending.dropLast()))
+        guard let pending else { return (nil, "") }
+        if let space = pending.lastIndex(of: " ") {
+            let earlier = String(pending[..<space])
+            let last = String(pending[pending.index(after: space)...])
+            return (earlier.isEmpty ? nil : earlier, String(last.dropLast()))
         }
-        return (nil, "")
+        return (nil, String(pending.dropLast()))
+    }
+
+    /// How many held tokens are words. Numbers riding along in the run (see
+    /// `holdsNumber`) don't count towards the word limit.
+    static func heldWordCount(_ pending: String) -> Int {
+        pending.split(separator: " ")
+            .filter { !$0.allSatisfy({ $0.isASCII && $0.isNumber }) }
+            .count
+    }
+
+    /// Whether a number may join the held run instead of ending it.
+    ///
+    /// A number has no language, so it cannot decide the held words — but it
+    /// used to end the hold anyway, through the email/URL path, which wrote
+    /// the held words out exactly as typed. "може да stane i to 10 часа": the
+    /// three ambiguous words were waiting, "10" arrived, and they landed
+    /// Latin, one word before "часа" would have settled them. Holding the
+    /// number too lets the next real word decide the whole run; the detector
+    /// passes numbers through unchanged.
+    ///
+    /// Only bare numbers, only with no punctuation stuck on (that ends the
+    /// thought), and only while the run is short — it is visible marked text.
+    static func holdsNumber(pending: String?, word: String, trailing: String,
+                            maxTokens: Int) -> Bool {
+        guard let pending, !pending.isEmpty, trailing.isEmpty, !word.isEmpty,
+              word.allSatisfy({ $0.isASCII && $0.isNumber })
+        else { return false }
+        return pending.split(separator: " ").count < maxTokens
     }
 }

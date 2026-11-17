@@ -47,9 +47,15 @@ targets:
       - path: LangAutoSwitcher/Sources/ShippedKeymaps.swift
       # Composing-buffer bookkeeping: pure Swift, no IMK.
       - path: LangAutoSwitcher/Sources/Composition.swift
+      # Mistake-log formatting + deletion watch: pure Foundation.
+      - path: LangAutoSwitcher/Sources/MistakeLog.swift
+      # Bundled-vs-installed dictionary choice: pure Foundation.
+      - path: LangAutoSwitcher/Sources/DictionarySource.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dklaturov.LangAutoSwitcherTests
+        # MistakeLog.swift is internal-build-only; the tests need to see it.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) INTERNAL_BUILD"
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
 

@@ -50,6 +50,8 @@ enum MenuStrings {
         case showKeyboard
         case showKeyboardPrompt
         case aboutPage
+        case logMistakes
+        case openMistakeLog
     }
 
     /// Which language the menu is written in. Follows the lead language when
@@ -77,6 +79,8 @@ enum MenuStrings {
             .leadLanguage:      "Main language",
             .autocorrect:       "Autocorrect (w → with)",
             .fixTypos:          "Fix typing mistakes",
+            .logMistakes:       "Log mistakes for review",
+            .openMistakeLog:    "Open the mistake log",
             .revertLastWord:    "Undo last word (⌥⌘Z)",
             .forceToLanguage:   "Force last word to %@ (⌥⌘B)",
             .learnedWords:      "Learned words: %@",
@@ -120,6 +124,8 @@ enum MenuStrings {
             .leadLanguage:      "Основен език",
             .autocorrect:       "Автокорекция (w → with)",
             .fixTypos:          "Поправяй печатни грешки",
+            .logMistakes:       "Записвай грешките за преглед",
+            .openMistakeLog:    "Отвори дневника с грешки",
             .revertLastWord:    "Върни последната дума (⌥⌘Z)",
             .forceToLanguage:   "Направи последната дума на %@ (⌥⌘B)",
             .learnedWords:      "Запомнени думи: %@",
@@ -163,6 +169,8 @@ enum MenuStrings {
             .leadLanguage:      "Основной язык",
             .autocorrect:       "Автозамена (w → with)",
             .fixTypos:          "Исправлять опечатки",
+            .logMistakes:       "Записывать ошибки для проверки",
+            .openMistakeLog:    "Открыть журнал ошибок",
             .revertLastWord:    "Отменить последнее слово (⌥⌘Z)",
             .forceToLanguage:   "Сделать последнее слово на %@ (⌥⌘B)",
             .learnedWords:      "Запомненные слова: %@",

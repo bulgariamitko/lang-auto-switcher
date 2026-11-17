@@ -139,11 +139,11 @@ final class CompositionTests: XCTestCase {
         XCTAssertEqual(Composition.commit(pending: "може ли", next: "да"), "може ли да")
     }
 
-    /// Backspacing through a run eats it one character at a time and ends
-    /// with nothing marked. The display never grows, no keypress is a no-op,
-    /// and the one two-character step is the same one the single-word case
-    /// already has: emptying the buffer also takes away the space that was
-    /// only being drawn because something followed it.
+    /// Backspacing through a run eats it and ends with nothing marked. The
+    /// display never grows and no keypress is a no-op. The two-character
+    /// steps are the single-word case once per held word: emptying the buffer
+    /// also takes away the space that was only drawn because something
+    /// followed it.
     func testBackspaceEatsARunDownToNothing() {
         var (pending, buffer) = (String?.some("move li"), "da")
         var lengths = [Composition.markedText(pending: pending, buffer: buffer).count]
@@ -151,8 +151,66 @@ final class CompositionTests: XCTestCase {
             (pending, buffer) = Composition.backspace(pending: pending, buffer: buffer)
             lengths.append(Composition.markedText(pending: pending, buffer: buffer).count)
         }
-        XCTAssertEqual(lengths, [10, 9, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0])
+        XCTAssertEqual(lengths, [10, 9, 7, 6, 4, 3, 2, 1, 0, 0, 0, 0, 0])
         XCTAssertNil(pending)
         XCTAssertEqual(Composition.markedText(pending: pending, buffer: buffer), "")
+    }
+
+    /// Regression: backspace on a held run moved the whole run, spaces and
+    /// all, into the buffer. "move li" then committed as ONE token with a
+    /// space inside, matched nothing, and stayed Latin. Only the last held
+    /// word comes off hold; the earlier ones keep waiting.
+    func testBackspaceOnARunUnholdsOnlyTheLastWord() {
+        let r = Composition.backspace(pending: "move li", buffer: "")
+        XCTAssertEqual(r.pending, "move")
+        XCTAssertEqual(r.buffer, "l")
+        XCTAssertFalse(r.buffer.contains(" "))
+    }
+
+    func testBackspaceOnAOneLetterLastWordLeavesTheRestHeld() {
+        let r = Composition.backspace(pending: "stane i", buffer: "")
+        XCTAssertEqual(r.pending, "stane")
+        XCTAssertEqual(r.buffer, "")
+    }
+
+    // MARK: - numbers in a held run
+
+    /// Regression (Viber): "може да stane i to 10 часа". Three ambiguous
+    /// words were held, "10" ended the hold through the email/URL path and
+    /// they landed Latin. A bare number joins the run instead, so "часа"
+    /// decides it.
+    func testANumberJoinsTheHeldRun() {
+        XCTAssertTrue(Composition.holdsNumber(pending: "stane i to", word: "10",
+                                              trailing: "", maxTokens: 5))
+    }
+
+    func testNothingHeldMeansNothingToJoin() {
+        XCTAssertFalse(Composition.holdsNumber(pending: nil, word: "10",
+                                               trailing: "", maxTokens: 5))
+    }
+
+    /// "to 10." ends the sentence: commit, don't keep holding.
+    func testPunctuationAfterTheNumberEndsTheHold() {
+        XCTAssertFalse(Composition.holdsNumber(pending: "to", word: "10",
+                                               trailing: ".", maxTokens: 5))
+    }
+
+    /// Only bare numbers: "a3", "10:30" or an address go the usual way.
+    func testOnlyBareNumbersJoin() {
+        XCTAssertFalse(Composition.holdsNumber(pending: "to", word: "a3",
+                                               trailing: "", maxTokens: 5))
+        XCTAssertFalse(Composition.holdsNumber(pending: "to", word: "x@y.bg",
+                                               trailing: "", maxTokens: 5))
+    }
+
+    /// The run is visible marked text, so it stays short.
+    func testAFullRunTakesNoMoreNumbers() {
+        XCTAssertFalse(Composition.holdsNumber(pending: "a b c 1 2", word: "3",
+                                               trailing: "", maxTokens: 5))
+    }
+
+    func testNumbersDoNotCountAsHeldWords() {
+        XCTAssertEqual(Composition.heldWordCount("stane i to 10"), 3)
+        XCTAssertEqual(Composition.heldWordCount("move"), 1)
     }
 }

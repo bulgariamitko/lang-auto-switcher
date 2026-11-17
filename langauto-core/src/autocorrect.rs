@@ -368,6 +368,29 @@ fn is_function_word(w: &str) -> bool {
     FUNCTION_WORDS.contains(&w)
 }
 
+/// The definite articles Bulgarian writes onto the end of a word:
+/// "фактури" + "те" = "фактурите" (the invoices), "фактура" + "та",
+/// "село" + "то". "те" and "то" are also stand-alone words (they, it), which
+/// is how the missing-space rescue used to tear "фактурите" into
+/// "фактури те".
+const DEFINITE_ARTICLES: &[&str] = &["те", "та", "то"];
+
+/// A word missing from the dictionary that is a dictionary word plus a
+/// definite article — the dictionary often has the bare form but not every
+/// articled one. It is that word, so it is accepted whole (Some(word)).
+/// The stem must be a real, non-trivial word (3+ letters) so that short
+/// fragments can't vouch for arbitrary endings.
+pub fn definite_article_form(word: &str, dict: &HashSet<String>) -> Option<String> {
+    for article in DEFINITE_ARTICLES {
+        if let Some(stem) = word.strip_suffix(article) {
+            if stem.chars().count() >= 3 && dict.contains(stem) {
+                return Some(word.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Missing-space rescue: "можешда" → "можеш да" when both halves are
 /// dictionary words AND at least one half is a short function word — the only
 /// kind a slipped spacebar realistically glues. Without that guard the split
@@ -383,6 +406,12 @@ pub fn split_into_two_words(word: &str, dict: &HashSet<String>) -> Option<String
     for i in 1..len {
         let left: String = chars[..i].iter().collect();
         let right: String = chars[i..].iter().collect();
+        // An article on the end of a content word is part of that word
+        // ("фактурите"), not a second word. After a function word it can
+        // still be a missed space ("дато" → "да то").
+        if DEFINITE_ARTICLES.contains(&right.as_str()) && !is_function_word(&left) {
+            continue;
+        }
         if dict.contains(&left)
             && dict.contains(&right)
             && (is_function_word(&left) || is_function_word(&right))
@@ -721,5 +750,32 @@ mod tests {
         assert_eq!(match_case("Hello", "world"), "World");
         assert_eq!(match_case("hello", "world"), "world");
         assert_eq!(match_case("", "world"), "world");
+    }
+
+    #[test]
+    fn definite_article_is_not_split_off() {
+        // Regression (Slack): "si bqha platili fakturite nali" came out
+        // "... фактури те нали". "фактурите" was missing from the dictionary,
+        // and "те" (they) is a function word, so the missing-space rescue
+        // split the article off.
+        let dict = build_dict(&["фактури", "те", "фактура", "село", "то", "да"]);
+        assert_eq!(split_into_two_words("фактурите", &dict), None);
+        assert_eq!(definite_article_form("фактурите", &dict), Some("фактурите".to_string()));
+        assert_eq!(definite_article_form("фактурата", &dict), Some("фактурата".to_string()));
+        assert_eq!(definite_article_form("селото", &dict), Some("селото".to_string()));
+    }
+
+    #[test]
+    fn a_missed_space_before_te_or_to_still_splits_after_a_function_word() {
+        let dict = build_dict(&["да", "то", "те"]);
+        assert_eq!(split_into_two_words("дато", &dict), Some("да то".to_string()));
+    }
+
+    #[test]
+    fn article_form_needs_a_real_stem() {
+        // No stem in the dictionary, or a stem too short to vouch for it.
+        let dict = build_dict(&["ме", "фактури"]);
+        assert_eq!(definite_article_form("мета", &dict), None);
+        assert_eq!(definite_article_form("кутиите", &dict), None);
     }
 }

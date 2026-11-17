@@ -138,24 +138,23 @@ enum LanguagePackStore {
 
     /// The word list for a language, or nil when it has not been installed.
     ///
-    /// Application Support wins over the bundle so a downloaded or updated
-    /// dictionary is not shadowed by a stale bundled copy. A bundled
-    /// dictionary is copied out on first use, which is what carries an
-    /// upgrading user's Bulgarian to safety before the bundle stops shipping
-    /// it.
+    /// A bundled language uses the bundle's list and refreshes the installed
+    /// copy whenever they differ, so dictionary fixes reach existing installs
+    /// (see `DictionarySource`). A downloaded language uses its installed copy.
+    /// The installed copy is still written, which is what carries an upgrading
+    /// user's Bulgarian to safety before the bundle stops shipping it.
     static func dictionaryText(for code: String) -> String? {
         let installed = dictionariesDirectory.appendingPathComponent("\(code)-dictionary.txt")
-        if let text = try? String(contentsOf: installed, encoding: .utf8), !text.isEmpty {
-            return text
+        let installedText = try? String(contentsOf: installed, encoding: .utf8)
+        let bundledText = Bundle.main.url(forResource: "\(code)-dictionary", withExtension: "txt")
+            .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+        guard let choice = DictionarySource.choose(installed: installedText,
+                                                   bundled: bundledText) else { return nil }
+        if choice.writeInstalled {
+            try? choice.text.write(to: installed, atomically: true, encoding: .utf8)
+            NSLog("LangAutoSwitcher: refreshed '%@' dictionary in Application Support from the bundle", code)
         }
-        guard let bundled = Bundle.main.url(forResource: "\(code)-dictionary",
-                                            withExtension: "txt"),
-              let text = try? String(contentsOf: bundled, encoding: .utf8),
-              !text.isEmpty
-        else { return nil }
-        try? text.write(to: installed, atomically: true, encoding: .utf8)
-        NSLog("LangAutoSwitcher: installed bundled '%@' dictionary into Application Support", code)
-        return text
+        return choice.text
     }
 
     static func isInstalled(_ code: String) -> Bool {

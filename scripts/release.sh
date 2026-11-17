@@ -197,6 +197,12 @@ if [ "$BUILT_SHORT" != "$VERSION" ] || [ "$BUILT_BUILD" != "$BUILD_NUMBER" ]; th
 fi
 echo "    $BUILT_SHORT ($BUILT_BUILD) ✓"
 
+# The mistake log is for the developer's own Mac only (install_internal.sh).
+if /usr/bin/strings -a "$APP_PATH/Contents/MacOS/LangAutoSwitcher" | grep -c "DeletionWatch" >/dev/null; then
+    echo "error: this build contains the internal mistake log. Refusing to publish."
+    exit 1
+fi
+
 echo "▸ Signing Sparkle's nested helpers and XPC services"
 FRAMEWORKS="$APP_PATH/Contents/Frameworks"
 if [ -d "$FRAMEWORKS/Sparkle.framework" ]; then

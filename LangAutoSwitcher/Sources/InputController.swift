@@ -1,3 +1,4 @@
+import Carbon
 import Cocoa
 import InputMethodKit
 import Sparkle
@@ -40,6 +41,10 @@ class InputController: IMKInputController {
     /// look-ahead has to end even if the ambiguity never does.
     private static let maxHeldWords = 3
 
+    /// Numbers ride along with a held run without counting as words (see
+    /// `Composition.holdsNumber`); this caps the run, numbers included.
+    private static let maxHeldTokens = 5
+
     /// Convert a held run, one word at a time, joined back the way it is drawn.
     /// The detector only takes single words, so a run must not be handed to it
     /// whole — it would see one unspellable token and leave the lot as typed.
@@ -60,6 +65,19 @@ class InputController: IMKInputController {
     /// unchanged case too (a word that stayed Latin), which `lastConversion`
     /// deliberately drops.
     private var lastCommitted: (original: String, output: String)? = nil
+
+    #if INTERNAL_BUILD
+    /// Watches the word just committed for being erased right away — the
+    /// hotkey-free way people correct a wrong conversion. See `MistakeLog`.
+    private var deletionWatch: DeletionWatch? = nil
+
+    /// A watched word that was erased; the next commit is what replaced it.
+    private var erasedWord: (watch: DeletionWatch, before: String?)? = nil
+
+    /// Text left of the watched word, read on the first Backspace — the only
+    /// moment the word is still on screen to anchor it.
+    private var deletionContext: String? = nil
+    #endif
 
     /// Whether the current app is a terminal — if so, pass all keys through directly.
     private var isTerminalApp = false
@@ -125,6 +143,14 @@ class InputController: IMKInputController {
         // ("neseru"+⌫+"iozno" → "neseruiozno") which isn't in the dictionary and
         // lands in Latin instead of converting to "несериозно". Plain Delete
         // only — let Cmd/Opt+Delete fall through to their existing handling.
+        // A Backspace that reaches the document right after a commit may be
+        // the user erasing a word we got wrong. ⌥⌫ erases it in one press.
+        #if INTERNAL_BUILD
+        if event.keyCode == 51, !isComposing, !modifiers.contains(.command) {
+            noteDocumentBackspace(client: client, wholeWord: modifiers.contains(.option))
+        }
+        #endif
+
         if TextHeuristics.isPlainBackspace(keyCode: event.keyCode,
                                            command: modifiers.contains(.command),
                                            option: modifiers.contains(.option)) {
@@ -174,6 +200,10 @@ class InputController: IMKInputController {
         switch event.keyCode {
         case 123, 124, 125, 126:  // Left, Right, Down, Up
             commitRawLatin(client: client)
+            #if INTERNAL_BUILD
+            // Navigating away: a later Backspace is editing elsewhere.
+            deletionWatch = nil
+            #endif
             return false
         default:
             break
@@ -251,7 +281,14 @@ class InputController: IMKInputController {
             return false  // Let it pass through
         }
 
-        // It's a mappable character — add to our composing buffer
+        // It's a mappable character — add to our composing buffer.
+        // A new word starting means the previous one was kept, so stop
+        // watching it for deletion.
+        #if INTERNAL_BUILD
+        if composingBuffer.isEmpty && pendingWord == nil {
+            deletionWatch = nil
+        }
+        #endif
         let letter = String(char)
         composingBuffer += letter
 
@@ -327,6 +364,16 @@ class InputController: IMKInputController {
             return
         }
 
+        // A number while words are held: hold it too, and let the next real
+        // word decide the run. See `Composition.holdsNumber`.
+        if Composition.holdsNumber(pending: pendingWord, word: word, trailing: trailing,
+                                   maxTokens: Self.maxHeldTokens),
+           let pending = pendingWord {
+            pendingWord = pending + " " + word
+            updateMarkedText(client: client)
+            return
+        }
+
         // Numbers stuck to a word ("2години", "години2", "2ри"): a digit
         // anywhere in a token otherwise makes isEmailOrUrl keep the whole
         // thing Latin. Peel edge digits and, if the letter core is a clear
@@ -355,8 +402,10 @@ class InputController: IMKInputController {
         // Email/URL detection: if buffer contains @ or has URL-like patterns,
         // commit as raw Latin without conversion.
         if TextHeuristics.isEmailOrUrl(word) {
-            // Commit pending word too if any (also as raw, since it's likely the local-part)
-            let fullText = Composition.commit(pending: pendingWord, next: word, trailing: trailing)
+            // Held words are separate words (a space follows them), so they
+            // are decided like words, not dumped raw along with the address.
+            let heldOutput = pendingWord.map(convertHeldRun)
+            let fullText = Composition.commit(pending: heldOutput, next: word, trailing: trailing)
             client.insertText(fullText,
                               replacementRange: NSRange(location: NSNotFound, length: 0))
             pendingWord = nil
@@ -401,7 +450,8 @@ class InputController: IMKInputController {
         if let pending = pendingWord,
            isAmbiguous,
            trailing.isEmpty,
-           pending.split(separator: " ").count < Self.maxHeldWords {
+           Composition.heldWordCount(pending) < Self.maxHeldWords,
+           pending.split(separator: " ").count < Self.maxHeldTokens {
             // The word we were waiting on is ambiguous itself, so it has no
             // vote to cast — keep waiting, with this word added to the run.
             // Without this a message opening "move li da..." (може ли да)
@@ -550,6 +600,14 @@ class InputController: IMKInputController {
 
         let absolute = NSRange(location: windowRange.location + found.location,
                                length: found.length)
+        #if INTERNAL_BUILD
+        if mayLogMistakes {
+            MistakeLog.record(.revert, typed: last.original, got: last.converted,
+                              before: textBefore(absolute.location, client: client),
+                              app: currentBundleID)
+        }
+        deletionWatch = nil
+        #endif
         client.insertText(last.original, replacementRange: absolute)
         detector.learnLatinWord(last.original)
         lastConversion = nil
@@ -573,6 +631,12 @@ class InputController: IMKInputController {
         // If what we already inserted is identical to the Cyrillic form, there
         // is nothing on screen to replace — just learning it is enough.
         guard cyrillic != last.output else {
+            #if INTERNAL_BUILD
+            if mayLogMistakes {
+                MistakeLog.record(.force, typed: last.original, got: last.output,
+                                  before: nil, app: currentBundleID)
+            }
+            #endif
             NSLog("LangAutoSwitcher: '%@' already Bulgarian; learned it", last.original)
             lastCommitted = nil
             return
@@ -599,6 +663,14 @@ class InputController: IMKInputController {
 
         let absolute = NSRange(location: windowRange.location + found.location,
                                length: found.length)
+        #if INTERNAL_BUILD
+        if mayLogMistakes {
+            MistakeLog.record(.force, typed: last.original, got: last.output,
+                              before: textBefore(absolute.location, client: client),
+                              app: currentBundleID)
+        }
+        deletionWatch = nil
+        #endif
         client.insertText(cyrillic, replacementRange: absolute)
         // The forward swap is itself revertible with ⌥⌘Z.
         lastConversion = (last.original, cyrillic)
@@ -614,7 +686,77 @@ class InputController: IMKInputController {
         if original != converted {
             lastConversion = (original, converted)
         }
+
+        #if INTERNAL_BUILD
+        // The word that replaced an erased one completes that mistake entry.
+        if let erased = erasedWord {
+            erasedWord = nil
+            if mayLogMistakes,
+               Date().timeIntervalSince(erased.watch.committedAt) <= DeletionWatch.window * 2 {
+                MistakeLog.record(.retyped, typed: original, got: converted,
+                                  before: erased.before, app: currentBundleID)
+            }
+        }
+
+        let known = detector.enDictionary.contains(original.lowercased())
+        deletionWatch = DeletionWatch.shouldWatch(original: original, output: converted,
+                                                  isKnownBaseWord: known)
+            ? DeletionWatch(original: original, output: converted, committedAt: Date())
+            : nil
+        deletionContext = nil
+        #endif
     }
+
+    #if INTERNAL_BUILD
+    // MARK: - Mistake log (internal build only)
+
+    /// Never log while a password field anywhere holds secure input.
+    private var mayLogMistakes: Bool {
+        MistakeLog.isEnabled && !IsSecureEventInputEnabled()
+    }
+
+    /// Up to a couple of lines' worth of text ending at `location`.
+    private func textBefore(_ location: Int, client: IMKTextInput) -> String? {
+        guard location != NSNotFound else { return nil }
+        guard location > 0 else { return "" }
+        let len = min(location, MistakeLog.contextLimit * 2)
+        return client.attributedSubstring(from: NSRange(location: location - len, length: len))?.string
+    }
+
+    /// Text left of `word`, which sits just before the caret.
+    private func textBeforeWordAtCaret(_ word: String, client: IMKTextInput) -> String? {
+        let sel = client.selectedRange()
+        guard sel.location != NSNotFound, sel.location > 0 else { return nil }
+        let lookback = min(sel.location, (word as NSString).length + 8)
+        let windowRange = NSRange(location: sel.location - lookback, length: lookback)
+        guard let window = client.attributedSubstring(from: windowRange)?.string as NSString? else {
+            return nil
+        }
+        let found = window.range(of: word, options: .backwards)
+        guard found.location != NSNotFound else { return nil }
+        return textBefore(windowRange.location + found.location, client: client)
+    }
+
+    private func noteDocumentBackspace(client: IMKTextInput, wholeWord: Bool) {
+        guard var watch = deletionWatch else { return }
+        if watch.isExpired {
+            deletionWatch = nil
+            return
+        }
+        if watch.backspaces == 0, mayLogMistakes {
+            deletionContext = textBeforeWordAtCaret(watch.output, client: client)
+        }
+        let gone = watch.backspace(wholeWord: wholeWord)
+        deletionWatch = watch
+        guard gone else { return }
+        deletionWatch = nil
+        guard mayLogMistakes else { return }
+        MistakeLog.record(.deleted, typed: watch.original, got: watch.output,
+                          before: deletionContext, app: currentBundleID)
+        erasedWord = (watch, deletionContext)
+        deletionContext = nil
+    }
+    #endif
 
     /// Commit pending word (converted normally) + composing buffer (raw ASCII).
     /// Used when buffer is an emoticon prefix and the upcoming char completes it.
@@ -738,6 +880,22 @@ class InputController: IMKInputController {
         typoFixItem.target = self
         typoFixItem.state = detector.typoCorrectionEnabled ? .on : .off
         menu.addItem(typoFixItem)
+
+        #if INTERNAL_BUILD
+        let mistakeLogItem = NSMenuItem(title: MenuStrings.t(.logMistakes),
+                                        action: #selector(toggleMistakeLog),
+                                        keyEquivalent: "")
+        mistakeLogItem.target = self
+        mistakeLogItem.state = MistakeLog.isEnabled ? .on : .off
+        menu.addItem(mistakeLogItem)
+
+        let openMistakeLogItem = NSMenuItem(title: MenuStrings.t(.openMistakeLog),
+                                            action: #selector(openMistakeLog),
+                                            keyEquivalent: "")
+        openMistakeLogItem.target = self
+        openMistakeLogItem.isEnabled = FileManager.default.fileExists(atPath: MistakeLog.url.path)
+        menu.addItem(openMistakeLogItem)
+        #endif
 
         menu.addItem(NSMenuItem.separator())
 
@@ -1171,6 +1329,19 @@ class InputController: IMKInputController {
               detector.typoCorrectionEnabled ? "ON" : "OFF")
     }
 
+    #if INTERNAL_BUILD
+    @objc private func toggleMistakeLog() {
+        MistakeLog.isEnabled.toggle()
+        deletionWatch = nil
+        erasedWord = nil
+        DebugLog.write("mistake log \(MistakeLog.isEnabled ? "ON" : "OFF")")
+    }
+
+    @objc private func openMistakeLog() {
+        NSWorkspace.shared.open(MistakeLog.url)
+    }
+    #endif
+
     @objc private func toggleCurrentAppExclusion() {
         guard let bundle = currentBundleID else { return }
         if AppExclusionManager.isExcluded(bundle) {
@@ -1222,6 +1393,11 @@ class InputController: IMKInputController {
         pendingWord = nil
         lastConversion = nil
         lastCommitted = nil
+        #if INTERNAL_BUILD
+        deletionWatch = nil
+        erasedWord = nil
+        deletionContext = nil
+        #endif
 
         // Detect if we're in a terminal app or a user-excluded app
         isTerminalApp = false

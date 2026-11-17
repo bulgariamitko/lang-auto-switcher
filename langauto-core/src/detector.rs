@@ -9,7 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::autocorrect::{
-    best_typo_fix, correct_bulgarian, correct_english,
+    best_typo_fix, correct_bulgarian, correct_english, definite_article_form,
     split_into_two_words, SpellCheckFn,
 };
 use crate::lang::LanguagePack;
@@ -619,6 +619,14 @@ impl LanguageDetector {
             return None;
         }
         let pack = &self.packs[lang];
+        // Not a typo at all: a known word with its definite article on
+        // ("фактурите"). Checked first so neither the typo search nor the
+        // missing-space split can turn it into something else.
+        if pack.id == "bg" {
+            if let Some(word) = definite_article_form(&lowered, &pack.dict) {
+                return Some(word);
+            }
+        }
         if let Some(fixed) = best_typo_fix(&lowered, pack) {
             return Some(fixed);
         }
@@ -1590,5 +1598,111 @@ mod tests {
         d.reset_context();
         assert!(d.is_first_word());
         assert_eq!(d.last_word_language, DetectedLanguage::Uncertain);
+    }
+
+    /// The shipped word lists, for regressions that live in the dictionary
+    /// itself rather than in the logic.
+    fn shipped_dicts() -> (HashSet<String>, HashSet<String>) {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../LangAutoSwitcher/Resources");
+        let load = |name: &str| -> HashSet<String> {
+            std::fs::read_to_string(format!("{}/{}", dir, name))
+                .expect("shipped dictionary")
+                .lines().map(|l| l.trim().to_lowercase()).filter(|l| !l.is_empty())
+                .collect()
+        };
+        (load("en-dictionary.txt"), load("bg-dictionary.txt"))
+    }
+
+    #[test]
+    fn clitic_j_converts_in_a_bulgarian_sentence() {
+        // Regression (Slack): "ti trqbwa da j ima[ nomera" came out
+        // "ти трябва да j имаш номера". The clitic "й" was missing from the
+        // Bulgarian list while "j" is in the English one, so the one-letter
+        // word looked English and stayed Latin.
+        let (en, bg) = shipped_dicts();
+        assert!(bg.contains("й"), "й must be in the Bulgarian dictionary");
+        let mut d = LanguageDetector::new(en, bg);
+        assert_eq!(d.process_word("trqbwa").converted, "трябва");
+        assert_eq!(d.process_word("da").converted, "да");
+        // "j" is now in both lists, so the app holds it for its right-hand
+        // neighbour; both neighbours are Bulgarian.
+        let (j, next) = d.resolve_pending("j", "ima[");
+        assert_eq!(j.converted, "й", "got {:?}", j.converted);
+        assert_eq!(next.converted, "имаш");
+    }
+
+    #[test]
+    fn clitic_j_converts_without_look_ahead() {
+        // Same sentence when the app does not hold "j" (its left neighbour
+        // already settled the language): it is decided from the left alone.
+        let (en, bg) = shipped_dicts();
+        let mut d = LanguageDetector::new(en, bg);
+        assert_eq!(d.process_word("trqbwa").converted, "трябва");
+        assert_eq!(d.process_word("da").converted, "да");
+        assert_eq!(d.process_word("j").converted, "й");
+    }
+
+    #[test]
+    fn j_stays_latin_in_english() {
+        // The other side of adding "й": an English "J" must not turn Cyrillic.
+        let (en, bg) = shipped_dicts();
+        let mut d = LanguageDetector::new(en, bg);
+        assert_eq!(d.process_word("this").converted, "this");
+        assert_eq!(d.process_word("is").converted, "is");
+        let (j, next) = d.resolve_pending("J", "Edgar");
+        assert_eq!(j.converted, "J", "got {:?}", j.converted);
+        assert_eq!(next.converted, "Edgar");
+    }
+
+    #[test]
+    fn synchronized_participle_converts() {
+        // Regression (Viber): "da sym ti sinhroniziral sesiqta" left
+        // "sinhroniziral" Latin — "синхронизирали" was in the dictionary but
+        // not "синхронизирал".
+        let (en, bg) = shipped_dicts();
+        let mut d = LanguageDetector::new(en, bg);
+        assert_eq!(d.process_word("da").converted, "да");
+        assert_eq!(d.process_word("sym").converted, "съм");
+        assert_eq!(d.process_word("ti").converted, "ти");
+        assert_eq!(d.process_word("sinhroniziral").converted, "синхронизирал");
+        assert_eq!(d.process_word("sesiqta").converted, "сесията");
+    }
+
+    #[test]
+    fn a_number_in_a_held_run_neither_votes_nor_blocks() {
+        // Regression (Viber): "може да stane i to 10 часа". The app now keeps
+        // "10" in the held run, so the run reaching the detector carries a
+        // number. It must pass through unchanged and leave "часа" to decide.
+        let (en, bg) = shipped_dicts();
+        let mut d = LanguageDetector::new(en, bg);
+        let (run, next) = d.resolve_pending("stane i to 10", "§asa");
+        assert_eq!(run.converted, "стане и то 10", "got {:?}", run.converted);
+        assert_eq!(next.converted, "часа");
+    }
+
+    #[test]
+    fn definite_plural_missing_from_the_dictionary_stays_one_word() {
+        // Regression (Slack): "...si bqha platili fakturite nali" came out
+        // "...си бяха платили фактури те нали" — the missing-space rescue
+        // split the article off a word the dictionary lacks.
+        let (en, bg) = shipped_dicts();
+        assert!(!bg.contains("фактурите"), "test needs the articled form to be missing");
+        let mut d = LanguageDetector::new(en, bg);
+        for (typed, want) in [("si", "си"), ("bqha", "бяха"), ("platili", "платили"),
+                              ("fakturite", "фактурите"), ("nali", "нали")] {
+            assert_eq!(d.process_word(typed).converted, want);
+        }
+    }
+
+    #[test]
+    fn flyers_convert() {
+        // Regression (Slack): "iskat da stanat tezi flaeri i plakati" left
+        // "flaeri" Latin — no form of "флаер" was in the dictionary.
+        let (en, bg) = shipped_dicts();
+        let mut d = LanguageDetector::new(en, bg);
+        for (typed, want) in [("iskat", "искат"), ("da", "да"), ("stanat", "станат"),
+                              ("tezi", "тези"), ("flaeri", "флаери")] {
+            assert_eq!(d.process_word(typed).converted, want);
+        }
     }
 }

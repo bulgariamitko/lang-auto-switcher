@@ -39,8 +39,17 @@ final class UpdateDelegate: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
     }
 }
 let updateDelegate = UpdateDelegate()
+// The internal build (scripts/install_internal.sh) never starts the updater:
+// it would swap this private build for the public release within the hour.
+// Not starting it writes nothing to defaults, so a later public install still
+// updates normally.
+#if INTERNAL_BUILD
+let startUpdater = false
+#else
+let startUpdater = true
+#endif
 let updaterController = SPUStandardUpdaterController(
-    startingUpdater: true,
+    startingUpdater: startUpdater,
     updaterDelegate: updateDelegate,
     userDriverDelegate: updateDelegate
 )
