@@ -1705,4 +1705,25 @@ mod tests {
             assert_eq!(d.process_word(typed).converted, want);
         }
     }
+    #[test]
+    fn weekend_converts() {
+        // Regression (Slack): "tezi fajlowe ]e gi naprawq uikenda da znae["
+        // left "uikenda" Latin — no form of "уикенд" was in the dictionary.
+        let (en, bg) = shipped_dicts();
+        let mut d = LanguageDetector::new(en, bg);
+        for (typed, want) in [("tezi", "тези"), ("fajlowe", "файлове"), ("]e", "ще"),
+                              ("gi", "ги"), ("naprawq", "направя"), ("uikenda", "уикенда")] {
+            assert_eq!(d.process_word(typed).converted, want, "{typed}");
+        }
+    }
+
+    #[test]
+    fn missing_loanwords_convert() {
+        let (en, bg) = shipped_dicts();
+        let mut d = LanguageDetector::new(en, bg);
+        for (typed, want) in [("prati", "прати"), ("mi", "ми"), ("mejla", "мейла"),
+                              ("i", "и"), ("skrijn[ota", "скрийншота")] {
+            assert_eq!(d.process_word(typed).converted, want, "{typed}");
+        }
+    }
 }
