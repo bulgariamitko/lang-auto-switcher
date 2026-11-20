@@ -1143,5 +1143,39 @@ Slack го рисуват като квадратче. Вече се показ�
                 type="application/octet-stream"
                 sparkle:edSignature="2pyAeszlJPMmSTYqQe7nfUjx0krpaDF/+wMhG71OHYnHgXYwv28ko36y4PilbLJwnXrGYSSSPVmSodqdokFVDw==" />
         </item>
+        <item>
+            <title>Version 2.9.6</title>
+            <pubDate>Fri, 20 Nov 2026 20:31:16 GMT</pubDate>
+            <sparkle:version>20906</sparkle:version>
+            <sparkle:shortVersionString>2.9.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<style>
+  body { font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.45;
+         color: -apple-system-label; }
+  h2 { margin: 0 0 6px 0; font-size: 15px; color: -apple-system-label; }
+  h3 { margin: 14px 0 4px 0; font-size: 13px; color: -apple-system-label; }
+  ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  kbd { font-family: ui-monospace, monospace; font-size: 12px; }
+  code { font-family: ui-monospace, monospace; font-size: 12px; }
+  @media (prefers-color-scheme: light) { body, h2, h3 { color: #1d1d1f; } }
+  @media (prefers-color-scheme: dark)  { body, h2, h3 { color: #f5f5f7; } }
+</style>
+<h2>v2.9.6 — Още думи, които оставаха на латиница</h2>
+
+<h3>Нови думи в речника</h3>
+<ul>
+  <li>преди: <code>uikenda</code> оставаше на латиница</li>
+  <li>сега: → „уикенда“ (и всички форми на „уикенд“)</li>
+  <li>още: мейл, ъпдейт, бекъп, окей, скрийншот, плейлист, стрийм — с формите им</li>
+</ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/bulgariamitko/lang-auto-switcher/releases/download/v2.9.6/LangAutoSwitcher-v2.9.6.zip"
+                length="4059424"
+                type="application/octet-stream"
+                sparkle:edSignature="e2u5z6SWSKKvXXbrxduXQdLnqxwOSOMcMsfmQFHqTaPAjBl5Qxw9Hf2nIMQ9zOFv9WPDBGX2h2CW9mpCdGCdCQ==" />
+        </item>
     </channel>
 </rss>
